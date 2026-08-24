@@ -105,11 +105,11 @@ Example deterministic fixture publications from a real `WorkspaceClient` round-t
 
 - Formal report: `report_3329a89f9afe62e8179882d6f9366c6d2f74de9081bc1c881ee4e541213a774d`
   - model: `workspace-artifact://sha256/cfc40752e07952685a8e31f408f17e029a7efbe916c6ae9dc5fb3b4c126d2e46`
-  - HTML: `workspace-artifact://sha256/85e8b7055ef7337474e5d51f69580ae429efedc6c3d0a40c0a5d050869facb8e`
+  - HTML: `workspace-artifact://sha256/0b5c72b05167a1464fb9ccaff2061b44ec5df664583ce178e392396696f8d414`
   - native tearsheet: `workspace-artifact://sha256/b957b4ee0eec0b101a91e2d316a3f2e3a13a14c010ecd5d42e02c88dfd8a0dd2`
 - Research report: `report_f367bd75625f06f971c706994cfc41fd3ba04cf20f713678c208fc5fa8ebe205`
   - model: `workspace-artifact://sha256/600d0f0597893159f6b363def8e060a59a0c8b7460982d38ad33890844a083c0`
-  - HTML: `workspace-artifact://sha256/e32e7f660cc4ba7b43c39ce4b711f0ac3088ecbdd390c57cfc7c4a30f1ca8a73`
+  - HTML: `workspace-artifact://sha256/4fec954144224858a9ebf79148a407d153031b1c2af0059fd87d4d8e1d506a72`
 
 These are explicitly fixture identities, not MarketHub-connected performance evidence.
 
@@ -131,7 +131,7 @@ These are explicitly fixture identities, not MarketHub-connected performance evi
 ## Release evidence
 
 Fresh validation root:
-`C:\Users\will\AppData\Local\Temp\strategy-reporting-four-wheel-b0f72daa33b845c1b5fe2f3ded8e1c2f`.
+`C:\Users\will\AppData\Local\Temp\strategy-reporting-postcommit-2cbde0d567844212b9648d2075ebe28a`.
 Its Workspace and portal are retained for audit during this release session.
 
 Wheel SHA-256 values used by that isolated Python 3.12 environment:
@@ -139,9 +139,11 @@ Wheel SHA-256 values used by that isolated Python 3.12 environment:
 - Strategy Workspace: `07fa57564f8e555c753dfc880d9104cc4d2ca101ef38e64934594a3ed75e3b5f`
 - Quant Runtime: `31a20467b582d81f7e35fc6d00e28dcafcb80403be2384ca2d4cfdc94a590560`
 - Apex Research: `e090f641e2407d52fdb75e6484a58b4f94901c3db0672cb623d8654ab3a81c87`
-- Strategy Reporting: `7a64ba8a0bcf1c023fbd16b1dc1aedfa98f20d28dbff29345e5dce2bf9b74f7a`
+- Strategy Reporting: `f78bb60d955dddcc017f04a485bc5ad0a73b0a6d083f858ae747a106a450374b`
 
 The three upstream repository HEADs above were also checked against their live `origin/main` refs.
-The Strategy Reporting repository commit/remote synchronization evidence is recorded in the final
-handoff because a commit cannot truthfully cite its own final SHA. No fixture result in this document
-is represented as MarketHub-connected performance evidence.
+Strategy Reporting was reviewed and committed in three coherent changes (`8f005e4`, `164275a`,
+`2b59828`) before this release-evidence update, then rebuilt and installed from the resulting wheel.
+Final repository synchronization is recorded in the handoff because a commit cannot truthfully cite
+its own final SHA. No fixture result in this document is represented as MarketHub-connected
+performance evidence.

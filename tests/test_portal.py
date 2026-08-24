@@ -210,3 +210,27 @@ def test_portal_merges_historical_roles_and_latest_wins_conflicts() -> None:
     assert [item["report_id"] for item in group["formal_runs"]["baseline_reference"]] == [
         "formal-shared"
     ]
+
+
+def test_portal_shows_only_latest_renderer_for_same_workspace_run() -> None:
+    package = {"strategy_id": "s", "revision": 1, "package_hash": "p"}
+    entries = [
+        {
+            "report_id": "latest-renderer",
+            "report_kind": "formal-run",
+            "created_at": "2026-02-01T00:00:00Z",
+            "_package": package,
+            "_workspace_run_id": "same-run",
+        },
+        {
+            "report_id": "older-renderer",
+            "report_kind": "formal-run",
+            "created_at": "2026-01-01T00:00:00Z",
+            "_package": package,
+            "_workspace_run_id": "same-run",
+        },
+    ]
+    group = _package_groups(entries)[0]
+    assert [item["report_id"] for item in group["formal_runs"]["baseline_reference"]] == [
+        "latest-renderer"
+    ]

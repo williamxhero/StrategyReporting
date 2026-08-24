@@ -74,6 +74,7 @@ class PortalBuilder:
                 subject = research_model.subject.study_id
                 package = _package_identity(research_model.strategy_package)
                 internal = {
+                    "_decision_id": research_model.subject.decision_id,
                     "_trials": research_model.trials,
                     "_discovery": research_model.discovery.model_dump(mode="json"),
                     "summary": {
@@ -238,11 +239,23 @@ def _package_groups(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for key in sorted(grouped):
         items = grouped[key]
-        research = sorted(
+        research_candidates = sorted(
             (item for item in items if item["report_kind"] == "research-study"),
             key=_publication_order,
             reverse=True,
         )
+        research: list[dict[str, Any]] = []
+        seen_decisions: set[tuple[str, str]] = set()
+        for item in research_candidates:
+            fallback = str(item["report_id"])
+            decision_key = (
+                str(item.get("subject", fallback)),
+                str(item.get("_decision_id", fallback)),
+            )
+            if decision_key in seen_decisions:
+                continue
+            seen_decisions.add(decision_key)
+            research.append(item)
         formal = sorted(
             (item for item in items if item["report_kind"] == "formal-run"),
             key=_publication_order,

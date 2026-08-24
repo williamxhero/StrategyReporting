@@ -1,0 +1,68 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "strategy-reporting"
+version = "0.1.0"
+description = "Deterministic offline reports for Strategy Workspace publications"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = {text = "Proprietary"}
+authors = [{name = "William"}]
+dependencies = [
+  "ijson>=3.4,<4",
+  "jinja2>=3.1.6,<4",
+  "nautilus_trader[visualization]==1.231.0",
+  "pandas>=2.2,<4",
+  "pydantic>=2.11,<3",
+  "strategy-workspace==0.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2.2",
+  "mypy>=1.15",
+  "playwright>=1.50",
+  "pytest>=8.3",
+  "ruff>=0.9",
+]
+
+[project.scripts]
+strategy-reporting = "strategy_reporting.cli:main"
+
+[tool.uv.sources]
+strategy-workspace = {path = "../strategy-workspace"}
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/strategy_reporting"]
+artifacts = [
+  "src/strategy_reporting/html/templates/*.html.j2",
+  "src/strategy_reporting/html/static/*.css",
+]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]
+markers = ["connected: requires a live Strategy Workspace or upstream service"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["strategy_reporting"]
+
+[[tool.mypy.overrides]]
+module = ["ijson", "ijson.*", "nautilus_trader.*", "pandas.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["strategy_workspace", "strategy_workspace.*"]
+ignore_missing_imports = true

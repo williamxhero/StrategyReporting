@@ -1,7 +1,141 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="{{ csp }}"><title>{{ model.title }}</title><style>{{ stylesheet }}</style></head><body class="{{ theme }}"><main><header><div class="eyebrow">Strategy Reporting · Research Study</div><h1>{{ model.title }}</h1><div class="muted">{{ model.subject.study_id }} · decision {{ model.subject.decision_id }}</div></header>
-<section><h2>研究结论</h2><div class="grid"><div class="card"><div class="muted">Decision</div><div class="value {{ 'good' if model.final_decision.status == 'accept' else 'bad' }}">{{ model.final_decision.status }}</div></div><div class="card"><div class="muted">Trials</div><div class="value">{{ model.trials|length }}</div></div><div class="card"><div class="muted">Protocol</div><div class="value">{{ model.subject.protocol_hash }}</div></div></div><h3>研究假设</h3><p>{{ model.hypothesis }}</p></section>
-<section><h2>Protocol 与门槛</h2><pre>{{ protocol }}</pre><table><thead><tr><th>Gate</th><th>Metric</th><th>Operator</th><th>Threshold</th></tr></thead><tbody>{% for gate in model.gate_specs %}<tr><td>{{ gate.gate }}</td><td>{{ gate.metric }}</td><td>{{ gate.operator }}</td><td>{{ gate.threshold }}</td></tr>{% endfor %}</tbody></table></section>
-<section><h2>Trial 时间线</h2>{% for trial, trial_json in trial_views %}<div class="card"><h3>#{{ trial.sequence }} · {{ trial.trial_id }}</h3><div class="muted">{{ trial.workspace_run_id }} · {{ trial.topology }} · {{ trial.run_status }}/{{ trial.result_outcome }}</div><pre>{{ trial_json }}</pre></div>{% endfor %}</section>
-<section><h2>Gate matrix</h2>{% for gate in model.gate_results %}<div class="card"><strong>{{ gate.result.gate }}</strong> · <span class="{{ 'good' if gate.result.status == 'pass' else 'bad' }}">{{ gate.result.status }}</span><div class="muted">{{ gate.result.metric }} {{ gate.result.operator }} {{ gate.result.threshold }} · observed {{ gate.result.observed }}</div></div>{% endfor %}</section>
-<section><h2>Evidence 与研究指标</h2><pre>{{ evidence }}</pre><pre>{{ metrics }}</pre></section><section><h2>稳健性、敏感性与容量</h2>{% for label, section in sections %}<div class="card"><h3>{{ label }} · {{ section.status }}</h3>{% if section.reason %}<div class="notice">{{ section.reason }}</div>{% endif %}{% if section.items %}<pre>{{ section.items }}</pre>{% endif %}</div>{% endfor %}</section>
-<section><h2>关联 Formal reports</h2>{% for link in model.related_formal_reports %}<div class="card"><strong>{{ link.workspace_run_id }}</strong> · {{ link.status }}{% if link.report_ids %}<pre>{{ link.report_ids }}</pre>{% endif %}</div>{% endfor %}</section><footer>研究页只消费 apex-research.study-report-source.v1，不解析 Markdown，不重建 engine metrics。</footer></main></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="{{ csp }}">
+  <title>{{ model.title }}</title>
+  <style>{{ stylesheet }}</style>
+</head>
+<body class="{{ theme }} research-report">
+  <a class="skip-link" href="#content">跳到正文</a>
+  <nav class="report-nav" aria-label="报告导航">
+    <a class="brand" href="#top">Strategy Reporting</a>
+    <div class="nav-links">
+      <a href="#decision">结论</a>
+      <a href="#gates">门槛</a>
+      <a href="#run">运行</a>
+      <a href="#limits">边界</a>
+      <a href="#evidence">证据</a>
+    </div>
+  </nav>
+  <main id="content">
+    <header class="report-header" id="top">
+      <div class="eyebrow">研究决策报告 · Research decision</div>
+      <div class="header-grid">
+        <div>
+          <h1>{{ model.title }}</h1>
+          <p class="scope">{{ view.strategy_id }} · revision {{ view.revision }} · {{ view.protocol_id }}</p>
+        </div>
+        <div class="run-state">
+          <span class="status-dot"></span>
+          <span>{{ '有限接受' if view.decision_status == 'accept' else '未接受' }}</span>
+          <small>decision {{ model.subject.decision_id }}</small>
+        </div>
+      </div>
+      <p class="lede">{{ model.hypothesis }}</p>
+    </header>
+
+    <div class="headline-strip" aria-label="研究摘要">
+      <div class="headline-metric"><span>协议决策</span><strong class="{{ 'positive' if view.decision_status == 'accept' else 'negative' }}">{{ view.decision_status }}</strong><small>只代表声明的 gate 通过</small></div>
+      <div class="headline-metric"><span>门槛结果</span><strong>{{ view.pass_count }} / {{ view.gate_count }}</strong><small>pass / total</small></div>
+      <div class="headline-metric"><span>研究拓扑</span><strong>{{ view.topology }}</strong><small>单正式运行，无 discovery leg</small></div>
+      <div class="headline-metric"><span>证据 artifact</span><strong>{{ view.artifact_count }}</strong><small>Workspace 公开 URI</small></div>
+      <div class="headline-metric"><span>源记录</span><strong>{{ view.source_record_count }}</strong><small>协议、trial、gate、evidence、decision</small></div>
+    </div>
+
+    <section class="report-section" id="decision">
+      <div class="section-heading"><div><span class="section-index">01</span><h2>结论的含义</h2></div><p>把“通过协议”与“策略已被全面验证”明确分开。</p></div>
+      <div class="decision-panel">
+        <div class="decision-mark {{ 'pass' if view.decision_status == 'accept' else 'fail' }}">
+          <span>APEX DECISION</span>
+          <strong>{{ view.decision_status }}</strong>
+          <small>{{ view.pass_count }} 项 gate 通过</small>
+        </div>
+        <div class="decision-copy">
+          <h3>这个 accept 可以说明什么</h3>
+          <p>当前冻结策略包已完成一次 formal run；所有声明的门槛都在同一 trial 上通过，且原生成交、执行配置和市场快照身份可追溯。</p>
+          <h3>这个 accept 不可以说明什么</h3>
+          <p>它不是实盘上线许可，不代表稳健性、参数敏感性、容量或样本外表现已被验证，也不代表与 legacy 结果数值一致。</p>
+        </div>
+      </div>
+      {% if view.protocol_note %}<details class="disclosure"><summary>上游协议说明 <small>原文，未从 Markdown 解析</small></summary><p class="protocol-note">{{ view.protocol_note }}</p></details>{% endif %}
+    </section>
+
+    <section class="report-section" id="gates">
+      <div class="section-heading"><div><span class="section-index">02</span><h2>{{ view.gate_count }} 项冻结门槛</h2></div><p>观测值和阈值都直接来自 Apex structured source，本页不重算 Runtime 指标。</p></div>
+      <div class="gate-list">
+        {% for gate in view.gate_views %}
+        <article class="gate-row">
+          <span class="gate-number">0{{ loop.index }}</span>
+          <div><h3>{{ gate.label }}</h3><small class="mono">{{ gate.name }}</small></div>
+          <div class="gate-expression"><strong>{{ gate.observed }}</strong><span>{{ gate.operator }} {{ gate.threshold }}</span><small>{{ gate.metric }}</small></div>
+          <span class="gate-status {{ gate.status }}">{{ gate.status }}</span>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="report-section" id="run">
+      <div class="section-heading"><div><span class="section-index">03</span><h2>被评审的正式运行</h2></div><p>这是证据索引，不是第二份绩效报告；单运行收益、回撤与交易归因以 formal report 为准。</p></div>
+      {% for trial in view.trial_views %}
+      <article class="trial-block">
+        <header><div><span>TRIAL {{ trial.sequence }}</span><h3>{{ trial.workspace_run_id }}</h3></div><strong class="positive">{{ trial.status }} / {{ trial.outcome }}</strong></header>
+        <dl class="definition-grid">
+          <div><dt>时间窗口</dt><dd>{{ trial.snapshot.start }} — {{ trial.snapshot.end }}</dd></div>
+          <div><dt>数据频率</dt><dd>{{ trial.snapshot.frequency }} · {{ trial.snapshot.adjustment }}</dd></div>
+          <div><dt>Snapshot ID</dt><dd class="mono">{{ trial.snapshot.snapshot_id }}</dd></div>
+          <div><dt>拓扑</dt><dd>{{ trial.topology }}</dd></div>
+        </dl>
+        {% for leg in trial.formal_legs %}
+        <div class="formal-leg-grid">
+          <div><span>执行后端</span><strong>{{ leg.adapter }} / {{ leg.formal_id }}</strong></div>
+          <div><span>合约品种</span><strong>{{ leg.contract_count }}</strong></div>
+          <div><span>原生成交行</span><strong>{{ leg.native_fill_rows }}</strong></div>
+          <div><span>滑点</span><strong>{{ leg.slippage_ticks }} ticks</strong></div>
+        </div>
+        <div class="instrument-line">{% for instrument in leg.contracts %}<span>{{ instrument }}</span>{% endfor %}</div>
+        <div class="identity-block"><span>Execution profile</span><strong class="mono">{{ leg.execution_profile_hash }}</strong><span>Fee / margin policy</span><strong>{{ leg.historical_rate_policy }} · effective {{ leg.effective_at }}</strong></div>
+        {% endfor %}
+        <details class="disclosure"><summary>冻结策略参数 <small>{{ trial.parameters|length }} 项</small></summary><dl class="plain-list">{% for key, value in trial.parameters|dictsort %}<div><dt>{{ key }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl></details>
+      </article>
+      {% endfor %}
+      <div class="formal-links">
+        <h3>关联的 final formal report</h3>
+        {% for link in view.links %}
+        <div><span>{{ link.workspace_run_id }} · {{ link.status }}</span>{% for report_id in link.report_ids %}<a href="../{{ report_id }}/index.html">{{ report_id }}</a>{% endfor %}</div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="report-section comparison-section" id="limits">
+      <div class="section-heading"><div><span class="section-index">04</span><h2>证据边界</h2></div><p>这些是当前 accept 必须带着的限定词，不应被页面上的绿色状态淹没。</p></div>
+      <div class="limit-grid">
+        <article><span>01</span><h3>formal_only</h3><p>只运行了一个正式后端，没有 discovery 或多引擎一致性检查。</p></article>
+        <article><span>02</span><h3>{{ view.snapshot_states|join(' / ') if view.snapshot_states else '快照验证未发布' }}</h3><p>{% if 'assumed_immutable' in view.snapshot_states %}快照身份已冻结，但 Workspace 正式报告将其信任策略标为 assumed_immutable，不是可重现的内容快照。{% else %}相关 formal report 未提供可用的快照验证状态，本报告不推断其可重现性。{% endif %}</p></article>
+        <article><span>03</span><h3>执行费率边界</h3><p>{% if view.rate_policies %}执行采用 {{ view.effective_dates|join(' / ') or '未声明日期' }} 生效的 profile；策略为 {{ view.rate_policies|join(' / ') }}，不可视为 point-in-time 历史费率。{% else %}未发布费率时点政策，本报告不推断历史成本语义。{% endif %}</p></article>
+        <article><span>04</span><h3>无 robustness / OOS</h3><p>未发布稳健性、敏感性或独立样本外窗口证据；当前结论不支持外推。</p></article>
+      </div>
+      <div class="availability-list research-availability">
+        {% for label, section in view.availability %}<div><span>{{ label }}</span><strong class="availability-status {{ section.status }}">{{ section.status }}</strong><small>{{ section.reason or section.items|join(', ') }}</small></div>{% endfor %}
+      </div>
+    </section>
+
+    <section class="report-section" id="evidence">
+      <div class="section-heading"><div><span class="section-index">05</span><h2>证据与血缘</h2></div><p>报告仅消费 apex-research.study-report-source.v1 和已验证的 formal report model；不解析 Markdown，不访问 SQLite。</p></div>
+      <dl class="plain-list source-summary">
+        <div><dt>Study</dt><dd class="mono">{{ model.subject.study_id }}</dd></div>
+        <div><dt>Decision</dt><dd class="mono">{{ model.subject.decision_id }}</dd></div>
+        <div><dt>Structured source</dt><dd class="mono">{{ model.source_publication.record_id }}</dd></div>
+        <div><dt>Protocol hash</dt><dd class="mono">{{ model.subject.protocol_hash }}</dd></div>
+      </dl>
+      {% for evidence in view.evidence_views %}
+      <div class="evidence-band"><div><span>Evidence record</span><strong class="mono">{{ evidence.record_id }}</strong></div><div><span>Artifact integrity</span><strong class="positive">{{ 'verified' if evidence.artifacts_verified else 'unverified' }}</strong></div><div><span>Artifact count</span><strong>{{ evidence.artifact_uris|length }}</strong></div></div>
+      <details class="disclosure"><summary>Workspace artifact URIs <small>已验证，限定数量</small></summary><div class="uri-list">{% for uri in evidence.artifact_uris %}<code>{{ uri }}</code>{% endfor %}</div></details>
+      {% endfor %}
+      <details class="disclosure"><summary>Cross-run research facts <small>Apex 选择与决策层，非 Runtime 绩效</small></summary><dl class="plain-list">{% for key, value in view.research_metrics %}<div><dt>{{ key }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl></details>
+    </section>
+    <footer>Strategy Reporting · deterministic offline HTML · Runtime 始终是单运行 engine metrics 的权威来源。</footer>
+  </main>
+</body>
+</html>

@@ -120,7 +120,7 @@ td small { display: block; color: var(--muted); margin-top: 3px; }
 .disclosure summary { cursor: pointer; padding: 17px 2px; font-weight: 720; list-style-position: outside; }
 .disclosure summary small { color: var(--muted); font-weight: 450; margin-left: 8px; }
 .disclosure[open] > summary { color: var(--accent); }
-.comparison-section { background: var(--ink); color: var(--paper); margin-inline: calc(50% - 50vw); padding-inline: max(4vw, calc((100vw - 1320px) / 2)); }
+.comparison-section { background: var(--ink); color: var(--paper); margin-inline: 0; padding-inline: clamp(22px, 4vw, 48px); }
 .comparison-section .section-heading p { color: #b8c3bd; }
 .comparison-section .table-scroll { background: transparent; border-color: #405048; }
 .comparison-section table { color: var(--paper); }

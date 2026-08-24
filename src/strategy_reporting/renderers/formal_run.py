@@ -77,7 +77,7 @@ PARAMETER_LABELS = {
 
 
 class FormalRunRenderer:
-    renderer_version = "formal-html.v2+template.4+csp.2+nautilus.1.231.0"
+    renderer_version = "formal-html.v2+template.5+csp.2+nautilus.1.231.0"
 
     def __init__(self) -> None:
         self.native = NativeTearsheetRenderer()

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from conftest import FakeWorkspace, add_apex_source
+from conftest import FakeWorkspace, add_apex_source, add_formal_run
 
 from strategy_reporting.application import ReportingApplication
 from strategy_reporting.canonical import canonical_sha256
@@ -37,6 +37,38 @@ def test_research_report_maps_discovery_when_present(workspace: FakeWorkspace) -
         item for item in report.envelope.artifacts if item.logical_role == "report-model"
     )
     assert '"discovery":{"items":["' in workspace.contents[model_ref.sha256].decode("utf-8")
+
+
+def test_research_html_is_a_human_decision_report_without_raw_payload_dumps(
+    workspace: FakeWorkspace,
+) -> None:
+    report = ReportingApplication(workspace).render_report(
+        "research-study", add_apex_source(workspace), ReportOptions()
+    )
+    html_ref = next(
+        item for item in report.envelope.artifacts if item.logical_role == "report-html"
+    )
+    page = workspace.contents[html_ref.sha256].decode("utf-8")
+    assert "结论的含义" in page
+    assert "accept 不可以说明什么" in page
+    assert "1 项冻结门槛" in page
+    assert "<pre" not in page
+    assert '"formal_legs"' not in page
+
+
+def test_research_model_carries_verified_formal_report_context(
+    workspace: FakeWorkspace,
+) -> None:
+    run_id = add_formal_run(workspace, run_id="run_apex_1")
+    app = ReportingApplication(workspace)
+    formal = app.render_report("formal-run", run_id, ReportOptions())
+    research = app.render_report("research-study", add_apex_source(workspace), ReportOptions())
+    model_ref = next(
+        item for item in research.envelope.artifacts if item.logical_role == "report-model"
+    )
+    model = workspace.contents[model_ref.sha256].decode("utf-8")
+    assert formal.envelope.report_id in model
+    assert '"snapshot_verification":"verified"' in model
 
 
 def test_missing_apex_source_never_falls_back_to_markdown(workspace: FakeWorkspace) -> None:

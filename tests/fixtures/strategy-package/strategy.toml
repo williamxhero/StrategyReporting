@@ -1,0 +1,21 @@
+schema = "quant-research.strategy-package.v1"
+strategy_id = "fixture.reporting-cli"
+revision = 1
+display_name = "Reporting CLI Fixture"
+parameter_schema = "parameters.schema.json"
+
+[pipeline]
+discovery = "forbidden"
+formal = "required"
+
+[requirements]
+asset_classes = ["equity"]
+frequencies = ["1d"]
+capabilities = ["data.bar.1d", "evidence.engine_native", "run.backtest"]
+decision_intents = ["target_weight"]
+
+[implementations.formal]
+nautilus = "formal/nautilus/strategy.py:FixtureStrategy"
+
+[dependencies]
+nautilus_api = "1.231.0"

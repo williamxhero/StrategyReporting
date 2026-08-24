@@ -1,5 +1,168 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="{{ csp }}"><title>{{ model.title }}</title><style>{{ stylesheet }}</style></head><body class="{{ theme }}"><main><header><div class="eyebrow">Strategy Reporting · Formal Run</div><h1>{{ model.title }}</h1><div class="muted">{{ model.subject.workspace_run_id }} · {{ model.subject.formal_id }} · {{ model.engine.engine_name }} {{ model.engine.engine_version }}</div></header>
-<section><h2>身份与结论</h2><div class="grid"><div class="card"><div class="muted">结果</div><div class="value">{{ model.subject.outcome }}</div></div><div class="card"><div class="muted">拓扑</div><div class="value">{{ model.subject.topology }}</div></div><div class="card"><div class="muted">快照</div><div class="value">{{ model.market.snapshot_id }}</div></div><div class="card"><div class="muted">参数哈希</div><div class="value">{{ model.strategy.parameters_hash }}</div></div></div></section>
-<section><h2>Nautilus 原生指标</h2><div class="grid">{% for group, values in metric_groups %}{% for name, value in values.items() %}<div class="card"><div class="muted">{{ group }} · {{ name }}</div><div class="value">{{ value }}</div></div>{% endfor %}{% endfor %}</div>{% if not model.performance.portfolio_returns %}<div class="notice">收益序列为空；原生 tearsheet 会显示合法空态。</div>{% endif %}</section>
-{% for name, label, preview in execution_sections %}<section><h2>{{ label }}</h2><div class="muted">共 {{ preview.total_rows }} 行，展示 {{ preview.rows|length }} 行，省略 {{ preview.omitted_count }} 行。</div>{% if preview.rows %}<table><thead><tr>{% for key in preview.rows[0].keys() %}<th>{{ key }}</th>{% endfor %}</tr></thead><tbody>{% for row in preview.rows %}<tr>{% for value in row.values() %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody></table>{% else %}<div class="notice">没有已发布记录。</div>{% endif %}</section>{% endfor %}
-<section><h2>运行与账户</h2><div class="grid"><div class="card"><h3>Run info</h3><pre>{{ run_info }}</pre></div><div class="card"><h3>Account info</h3><pre>{{ account_info }}</pre></div></div></section><section><h2>数据质量与来源</h2><pre>{{ quality }}</pre><div class="muted">原生交互 tearsheet 作为同一 publication 的独立 artifact 发布。</div></section><footer>本报告只展示 Workspace 中已验证的已发布事实，不重新计算 Nautilus 指标。</footer></main></body></html>
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="{{ csp }}">
+  <title>{{ view.display_title }} · 正式回测报告</title>
+  <style>{{ stylesheet }}</style>
+</head>
+<body class="{{ theme }}">
+  <a class="skip-link" href="#content">跳到正文</a>
+  <nav class="report-nav" aria-label="报告目录">
+    <a class="brand" href="#top">Strategy Reporting</a>
+    <div class="nav-links">
+      <a href="#performance">绩效</a>
+      <a href="#trades">交易</a>
+      <a href="#data">数据</a>
+      <a href="#evidence">证据</a>
+    </div>
+  </nav>
+
+  <main id="content">
+    <header id="top" class="report-header">
+      <div class="eyebrow">Formal run · NautilusTrader {{ model.engine.engine_version }}</div>
+      <div class="header-grid">
+        <div>
+          <h1>{{ view.display_title }}</h1>
+          <p class="scope">{{ view.scope }}</p>
+        </div>
+        <div class="run-state">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span>{{ "已完成" if model.subject.outcome == "completed" else model.subject.outcome }}</span>
+          <small>{{ model.subject.workspace_run_id }}</small>
+        </div>
+      </div>
+      <p class="lede">本页只呈现该 Workspace run 已验证并发布的事实。组合收益、订单和账户指标来自 Nautilus 原生接口；回撤与年度路径仅由同一原生收益序列做确定性展示推导。</p>
+    </header>
+
+    <section class="headline-strip" aria-label="核心指标">
+      {% for item in view.headline %}
+      <div class="headline-metric">
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+        <small>{{ item.note }}</small>
+      </div>
+      {% endfor %}
+    </section>
+
+    <section id="performance" class="report-section">
+      <div class="section-heading">
+        <div><span class="section-index">01</span><h2>组合路径与回撤</h2></div>
+        <p>{{ view.source_point_count }} 个原生收益点；图表最多保留 720 个确定性采样点，并强制保留最深回撤位置。</p>
+      </div>
+      {% if view.portfolio_available %}
+      <div class="chart-stack">
+        <figure>
+          <figcaption><span>累计收益</span><small>{{ view.path_start }} — {{ view.path_end }}</small></figcaption>
+          {{ view.equity_svg }}
+        </figure>
+        <figure>
+          <figcaption><span>水下回撤</span><small>峰值 {{ view.drawdown_peak }} · 谷底 {{ view.drawdown_trough }}</small></figcaption>
+          {{ view.drawdown_svg }}
+        </figure>
+      </div>
+      <div class="drawdown-summary">
+        <div><span>最深回撤</span><strong>{{ view.max_drawdown }}</strong></div>
+        <div><span>峰值日期</span><strong>{{ view.drawdown_peak }}</strong></div>
+        <div><span>谷底日期</span><strong>{{ view.drawdown_trough }}</strong></div>
+        <div><span>恢复日期</span><strong>{{ view.drawdown_recovery }}</strong></div>
+      </div>
+      {% else %}
+      <div class="notice">原生组合收益序列不可用，因此不展示曲线、回撤或年度路径。</div>
+      {% endif %}
+
+      <div class="two-column detail-block">
+        <div>
+          <h3>年度组合收益</h3>
+          <p class="supporting">按自然年复合原生组合收益序列；这是展示推导，不是新的策略指标口径。</p>
+          <div class="table-scroll compact-table"><table><thead><tr><th>年度</th><th>收益</th></tr></thead><tbody>
+          {% for row in view.annual_returns %}<tr><td>{{ row.year }}</td><td class="{{ row.tone }}">{{ row.value }}</td></tr>{% else %}<tr><td colspan="2">无可用年度数据</td></tr>{% endfor %}
+          </tbody></table></div>
+        </div>
+        <div>
+          <h3>Nautilus 原生绩效</h3>
+          <p class="supporting">保留引擎命名口径，中文标签仅用于阅读，不重新计算这些指标。</p>
+          <div class="metric-list">
+          {% for row in view.metric_rows %}<div><span>{{ row.name }}</span><strong>{{ row.value }}</strong><small>{{ row.source }}</small></div>{% endfor %}
+          {% for row in view.general_rows %}<div><span>{{ row.name }}</span><strong>{{ row.value }}</strong><small>{{ row.source }}</small></div>{% endfor %}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="trades" class="report-section">
+      <div class="section-heading">
+        <div><span class="section-index">02</span><h2>交易活动与成本</h2></div>
+        <p>以下归因回答“在哪些品种发生了多少交易、产生多少费用”，不冒充 artifact 未提供的品种级实现盈亏。</p>
+      </div>
+      <div class="semantic-grid">
+      {% for label, value in view.execution_semantics %}<div><span>{{ label }}</span><strong>{{ value }}</strong></div>{% endfor %}
+      </div>
+      <div class="table-scroll activity-table"><table>
+        <thead><tr><th>品种</th><th>订单</th><th>成交</th><th>买 / 卖</th><th>仓位事件</th><th>决策</th><th>费用</th></tr></thead>
+        <tbody>{% for row in view.activity_rows %}<tr><td><strong>{{ row.instrument }}</strong></td><td>{{ row.order_count }}</td><td>{{ row.fill_count }}</td><td>{{ row.buy_fill_count }} / {{ row.sell_fill_count }}</td><td>{{ row.position_event_count }}</td><td>{{ row.decision_count }}</td><td>{{ row.fee_display or "—" }}</td></tr>{% else %}<tr><td colspan="7">无交易活动</td></tr>{% endfor %}</tbody>
+        <tfoot><tr><td colspan="6">费用合计</td><td>{{ view.fee_totals }}</td></tr></tfoot>
+      </table></div>
+      <div class="two-column detail-block">
+        <div>
+          <h3>决策原因分布</h3>
+          <div class="rank-list">{% for item in view.decision_reasons %}<div><span>{{ item.reason }}</span><strong>{{ item.count }}</strong></div>{% else %}<p>无决策原因数据。</p>{% endfor %}</div>
+        </div>
+        <div>
+          <h3>手续费标签</h3>
+          <div class="rank-list">{% for item in view.commission_tags %}<div><span>{{ item.tag }}</span><strong>{{ item.count }}</strong></div>{% else %}<p>无手续费标签数据。</p>{% endfor %}</div>
+          <p class="notice subtle">手续费和 1.5 ticks 滑点已按 Runtime 冻结语义进入引擎执行；本页展示其配置与结果，不另行扣减。</p>
+        </div>
+      </div>
+      {% if view.contract_costs %}<details class="disclosure"><summary>查看 23 个合约的保证金与手续费配置</summary><div class="table-scroll"><table><thead><tr><th>品种</th><th>交易所</th><th>乘数</th><th>初始保证金</th><th>开仓</th><th>平仓</th><th>平今</th></tr></thead><tbody>{% for row in view.contract_costs %}<tr><td>{{ row.instrument }}</td><td>{{ row.exchange }}</td><td>{{ row.multiplier }}</td><td>{{ row.margin }}</td><td>{{ row.open }}</td><td>{{ row.close }}</td><td>{{ row.close_today }}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}
+    </section>
+
+    <section class="report-section comparison-section">
+      <div class="section-heading">
+        <div><span class="section-index">03</span><h2>与旧版结构报告的差异</h2></div>
+        <p>旧版单品种半年报告只作为结构验证背景；其指标不迁移、不拼接，也不用于解释本次长期组合结果。</p>
+      </div>
+      <div class="table-scroll"><table class="comparison-table"><thead><tr><th>维度</th><th>旧版结构报告</th><th>本次正式报告</th></tr></thead><tbody>{% for label, old, current in view.legacy_comparison %}<tr><th>{{ label }}</th><td>{{ old }}</td><td>{{ current }}</td></tr>{% endfor %}</tbody></table></div>
+    </section>
+
+    <section id="data" class="report-section">
+      <div class="section-heading">
+        <div><span class="section-index">04</span><h2>数据范围与完整性</h2></div>
+        <p>MarketHub 行情版本和合约目录版本均来自本次 Runtime identity / normalized output；快照为 assumed_immutable，不伪装成具备 verification block。</p>
+      </div>
+      <div class="definition-grid">{% for label, value in view.coverage %}<div><dt>{{ label }}</dt><dd>{{ value }}</dd></div>{% endfor %}</div>
+      <div class="instrument-line" aria-label="纳入品种">{% for instrument in view.instruments %}<span>{{ instrument }}</span>{% endfor %}</div>
+      <div class="availability-list">{% for item in view.availability %}<div><span class="availability-status {{ item.status }}">{{ item.status }}</span><strong>{{ item.name }}</strong>{% if item.reason %}<small>{{ item.reason }}</small>{% endif %}</div>{% endfor %}</div>
+      <h3>策略参数</h3>
+      <div class="definition-grid parameters">{% for item in view.parameters %}<div><dt>{{ item.name }}</dt><dd>{{ item.value }}</dd></div>{% endfor %}</div>
+    </section>
+
+    <section class="report-section">
+      <div class="section-heading">
+        <div><span class="section-index">05</span><h2>订单、成交与账户样本</h2></div>
+        <p>每类最多展示 16 行，完整行数和省略数保留在报告模型；大体量源数据始终通过 Workspace 公共 artifact materialization 流式读取。</p>
+      </div>
+      {% for section in view.execution_sections %}
+      <details class="disclosure"{% if section.name in ["fills", "orders"] %} open{% endif %}>
+        <summary>{{ section.label }} <small>共 {{ "{:,}".format(section.total_rows) }} 行 · 展示 {{ section.shown_rows }} 行 · 省略 {{ "{:,}".format(section.omitted_count) }} 行</small></summary>
+        {% if section.rows %}<div class="table-scroll"><table><thead><tr>{% for column in section.columns %}<th>{{ column }}</th>{% endfor %}</tr></thead><tbody>{% for row in section.rows %}<tr>{% for value in row %}<td>{{ value }}</td>{% endfor %}</tr>{% endfor %}</tbody></table></div>{% else %}<p class="empty-state">没有已发布记录。</p>{% endif %}
+      </details>
+      {% endfor %}
+    </section>
+
+    <section id="evidence" class="report-section evidence-section">
+      <div class="section-heading">
+        <div><span class="section-index">06</span><h2>证据与重建边界</h2></div>
+        <p>HTML 仅由 report-model JSON 重建；页面不读取 Runtime、SQLite 或私有 artifact 路径，也不依赖网络资源。</p>
+      </div>
+      <div class="quality-line">{% for label, value in view.quality %}<div><span>{{ label }}</span><strong>{{ value }}</strong></div>{% endfor %}</div>
+      <details class="disclosure"><summary>运行与账户原生字段</summary><div class="two-column"><dl class="plain-list">{% for key, value in view.run_rows %}<div><dt>{{ key }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl><dl class="plain-list">{% for key, value in view.account_rows %}<div><dt>{{ key }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl></div></details>
+      <details class="disclosure"><summary>Workspace artifact 清单与内容身份</summary><div class="table-scroll"><table><thead><tr><th>名称</th><th>角色 / schema</th><th>大小</th><th>SHA-256 / URI</th></tr></thead><tbody>{% for item in view.artifacts %}<tr><td>{{ item.name }}</td><td>{{ item.role }}<small>{{ item.schema }}</small></td><td>{{ item.bytes }}</td><td class="mono">{{ item.sha256 }}<small>{{ item.uri }}</small></td></tr>{% endfor %}</tbody></table></div></details>
+      <div class="identity-block"><span>Run</span><code>{{ model.subject.workspace_run_id }}</code><span>Attempt</span><code>{{ model.subject.attempt_id }}</code><span>Snapshot</span><code>{{ model.market.snapshot_id }}</code><span>Package</span><code>{{ model.strategy.package_hash }}</code></div>
+    </section>
+
+    <footer>Strategy Reporting · 确定性、离线、自包含 · {{ model.subject.formal_id }}</footer>
+  </main>
+</body>
+</html>

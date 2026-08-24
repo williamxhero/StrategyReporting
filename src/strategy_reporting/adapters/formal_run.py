@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import tempfile
+from collections import Counter, defaultdict
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from decimal import ROUND_HALF_EVEN, Decimal, InvalidOperation
 from hashlib import sha256
 from pathlib import Path
 from typing import Any, Literal
@@ -60,6 +62,9 @@ MAX_NATIVE_STATISTICS_BYTES = 4_000_000
 MAX_EVIDENCE_INDEX_BYTES = 1_000_000
 MAX_NORMALIZED_METRICS_BYTES = 1_000_000
 MAX_NORMALIZED_ROW_BYTES = 1_000_000
+MAX_ANALYTICS_GROUPS = 1_000
+MAX_CHART_POINTS = 720
+ANALYTICS_DECIMAL = Decimal("0.000000000001")
 
 
 class WorkspaceFormalRunAdapter:
@@ -142,7 +147,7 @@ class WorkspaceFormalRunAdapter:
             raise ContractError(
                 "reporting_input_schema_mismatch", "native reporting input v1 fields differ"
             )
-        execution_performance, execution_rows, normalized_facts = self._stream_normalized(
+        execution_performance, execution_rows, normalized_facts, activity = self._stream_normalized(
             selected["normalized_output.json"], refs, formal_id, native, options
         )
         extraction = as_object(native.get("extraction"), "extraction")
@@ -170,6 +175,7 @@ class WorkspaceFormalRunAdapter:
         package_ref = as_object(request.get("strategy_package"), "strategy_package")
         parameters = as_object(request.get("parameters", {}), "parameters")
         snapshot = as_object(request.get("market_snapshot"), "market_snapshot")
+        requested_formal_config = self._requested_formal_config(request, formal_id)
         self._verify_identity_mirrors(
             leg,
             package_ref,
@@ -177,10 +183,19 @@ class WorkspaceFormalRunAdapter:
             snapshot,
             normalized_facts,
         )
+        manifest = as_object(run.get("package", {}).get("manifest", {}), "package.manifest")
         title = str(
-            run.get("package", {}).get("manifest", {}).get("name")
+            manifest.get("display_name")
+            or manifest.get("name")
             or package_ref.get("strategy_id")
             or formal_id
+        )
+        if "�" in title:
+            title = str(package_ref.get("strategy_id") or formal_id)
+        snapshot_verification = (
+            "verified"
+            if isinstance(snapshot.get("verification"), Mapping)
+            else str(snapshot.get("trust_policy") or "unverified")
         )
         return FormalRunReport(
             title=f"{title} · 正式回测报告",
@@ -208,7 +223,7 @@ class WorkspaceFormalRunAdapter:
             market={
                 "snapshot": snapshot,
                 "snapshot_id": snapshot.get("snapshot_id"),
-                "verification_status": "verified",
+                "verification_status": snapshot_verification,
             },
             engine={
                 "adapter": "nautilus",
@@ -221,6 +236,7 @@ class WorkspaceFormalRunAdapter:
                 "execution_config_hash": self._formal_identity(runtime_identity, formal_id).get(
                     "config_hash"
                 ),
+                "execution_config": requested_formal_config,
             },
             performance=FormalPerformance(
                 stats_pnls=as_object(native.get("stats_pnls"), "stats_pnls"),
@@ -250,11 +266,130 @@ class WorkspaceFormalRunAdapter:
             quality={
                 "artifact_verification": "verified",
                 "evidence_index_verification": "verified",
+                "snapshot_verification": snapshot_verification,
+                "reporting_input_schema": native.get("schema"),
                 "source_file_count": len(refs),
             },
             execution_performance=execution_performance,
+            analytics={
+                "schema": "strategy-reporting.formal-analytics.v1",
+                "portfolio_path": self._portfolio_analytics(returns),
+                "activity": activity,
+                "derivation": {
+                    "portfolio_path": "presentation-derived from native_statistics.json#portfolio_returns",
+                    "activity": "presentation-derived from normalized_output.json execution arrays",
+                },
+            },
             source_artifacts=sorted(consumed, key=lambda item: (item.name, item.sha256)),
         )
+
+    @staticmethod
+    def _requested_formal_config(request: dict[str, Any], formal_id: str) -> dict[str, Any]:
+        execution = as_object(request.get("execution"), "run.request.execution")
+        raw_formal = execution.get("formal")
+        if raw_formal is None:
+            return {}
+        formal = as_list(raw_formal, "run.request.execution.formal")
+        matches = [
+            as_object(item, "requested formal leg")
+            for item in formal
+            if isinstance(item, Mapping) and item.get("id") == formal_id
+        ]
+        if len(matches) != 1:
+            raise ContractError(
+                "formal_identity_mismatch", "requested formal configuration is missing or ambiguous"
+            )
+        return as_object(matches[0].get("config", {}), "requested formal config")
+
+    @staticmethod
+    def _portfolio_analytics(returns: list[PortfolioReturnPoint]) -> dict[str, Any]:
+        if not returns:
+            return {
+                "status": "unavailable",
+                "reason": "native portfolio return series is empty",
+                "chart_points": [],
+                "annual_returns": [],
+                "max_drawdown": None,
+            }
+        cumulative = Decimal(1)
+        peak = Decimal(1)
+        peak_index = 0
+        max_drawdown = Decimal(0)
+        max_peak_index = 0
+        trough_index = 0
+        full_points: list[dict[str, Any]] = []
+        annual: dict[int, Decimal] = {}
+        for index, point in enumerate(returns):
+            cumulative *= Decimal(1) + point.value
+            year = point.timestamp.year
+            annual[year] = annual.get(year, Decimal(1)) * (Decimal(1) + point.value)
+            if cumulative > peak:
+                peak = cumulative
+                peak_index = index
+            drawdown = cumulative / peak - Decimal(1) if peak else Decimal(-1)
+            if drawdown < max_drawdown:
+                max_drawdown = drawdown
+                max_peak_index = peak_index
+                trough_index = index
+            full_points.append(
+                {
+                    "timestamp": point.timestamp.date().isoformat(),
+                    "cumulative_return": WorkspaceFormalRunAdapter._decimal_text(
+                        cumulative - Decimal(1)
+                    ),
+                    "drawdown": WorkspaceFormalRunAdapter._decimal_text(drawdown),
+                }
+            )
+        recovery_index = next(
+            (
+                index
+                for index in range(trough_index + 1, len(full_points))
+                if Decimal(full_points[index]["cumulative_return"])
+                >= Decimal(full_points[max_peak_index]["cumulative_return"])
+            ),
+            None,
+        )
+        sampled = WorkspaceFormalRunAdapter._sample_points(full_points, trough_index)
+        return {
+            "status": "available",
+            "source_point_count": len(full_points),
+            "chart_points": sampled,
+            "annual_returns": [
+                {
+                    "year": year,
+                    "return": WorkspaceFormalRunAdapter._decimal_text(value - Decimal(1)),
+                }
+                for year, value in sorted(annual.items())
+            ],
+            "max_drawdown": WorkspaceFormalRunAdapter._decimal_text(max_drawdown),
+            "drawdown_peak": full_points[max_peak_index]["timestamp"],
+            "drawdown_trough": full_points[trough_index]["timestamp"],
+            "drawdown_recovery": (
+                full_points[recovery_index]["timestamp"] if recovery_index is not None else None
+            ),
+        }
+
+    @staticmethod
+    def _sample_points(points: list[dict[str, Any]], required_index: int) -> list[dict[str, Any]]:
+        if len(points) <= MAX_CHART_POINTS:
+            return points
+        indexes = {
+            index * (len(points) - 1) // (MAX_CHART_POINTS - 1) for index in range(MAX_CHART_POINTS)
+        }
+        if required_index not in indexes:
+            replaceable = min(
+                (index for index in indexes if index not in {0, len(points) - 1}),
+                key=lambda index: abs(index - required_index),
+            )
+            indexes.remove(replaceable)
+            indexes.add(required_index)
+        return [points[index] for index in sorted(indexes)]
+
+    @staticmethod
+    def _decimal_text(value: Decimal) -> str:
+        rounded = value.quantize(ANALYTICS_DECIMAL, rounding=ROUND_HALF_EVEN)
+        text = format(rounded, "f").rstrip("0").rstrip(".")
+        return text if text and text != "-0" else "0"
 
     @staticmethod
     def _select_formal_id(formal: dict[str, Any], requested: str | None) -> str:
@@ -417,7 +552,7 @@ class WorkspaceFormalRunAdapter:
         formal_id: str,
         native: dict[str, Any],
         options: ReportOptions,
-    ) -> tuple[dict[str, Any], dict[str, TablePreview], dict[str, Any]]:
+    ) -> tuple[dict[str, Any], dict[str, TablePreview], dict[str, Any], dict[str, Any]]:
         with tempfile.TemporaryDirectory(prefix="strategy-reporting-normalized-") as root:
             path = Path(root) / "normalized_output.json"
             self.workspace.materialize_verified(ref, path)
@@ -462,6 +597,7 @@ class WorkspaceFormalRunAdapter:
                 section: self._stream_preview(path, section, refs, formal_id, options)
                 for section in NORMALIZED_SECTIONS
             }
+            activity = self._stream_activity(path)
             facts = {
                 key: self._stream_single(path, key)
                 for key in (
@@ -479,7 +615,120 @@ class WorkspaceFormalRunAdapter:
                     "normalized_output_identity_mismatch",
                     "normalized output hash does not match semantic payload",
                 )
-            return metrics, execution, facts
+            return metrics, execution, facts, activity
+
+    @staticmethod
+    def _stream_activity(path: Path) -> dict[str, Any]:
+        instruments: dict[str, dict[str, Any]] = defaultdict(
+            lambda: {
+                "order_count": 0,
+                "fill_count": 0,
+                "buy_fill_count": 0,
+                "sell_fill_count": 0,
+                "position_event_count": 0,
+                "decision_count": 0,
+                "fees": defaultdict(Decimal),
+            }
+        )
+        reasons: Counter[str] = Counter()
+        commission_tags: Counter[str] = Counter()
+
+        def instrument_bucket(raw: Any, section: str) -> dict[str, Any]:
+            row = as_object(raw, f"{section} row")
+            instrument = str(row.get("instrument") or "未标注")
+            if instrument not in instruments and len(instruments) >= MAX_ANALYTICS_GROUPS - 1:
+                instrument = "其他品种"
+            return {"row": row, "instrument": instrument, "bucket": instruments[instrument]}
+
+        with path.open("rb") as stream:
+            for raw in ijson.items(stream, "orders.item", use_float=True):
+                item = instrument_bucket(raw, "orders")
+                item["bucket"]["order_count"] += 1
+                tags = item["row"].get("tags", [])
+                if isinstance(tags, list):
+                    for tag in tags:
+                        if str(tag).startswith("commission:"):
+                            commission_tags[str(tag).removeprefix("commission:")] += 1
+        with path.open("rb") as stream:
+            for raw in ijson.items(stream, "fills.item", use_float=True):
+                item = instrument_bucket(raw, "fills")
+                item["bucket"]["fill_count"] += 1
+                side = str(item["row"].get("side") or "").upper()
+                if side == "BUY":
+                    item["bucket"]["buy_fill_count"] += 1
+                elif side == "SELL":
+                    item["bucket"]["sell_fill_count"] += 1
+        with path.open("rb") as stream:
+            for raw in ijson.items(stream, "positions.item", use_float=True):
+                item = instrument_bucket(raw, "positions")
+                item["bucket"]["position_event_count"] += 1
+        with path.open("rb") as stream:
+            for raw in ijson.items(stream, "fees.item", use_float=True):
+                item = instrument_bucket(raw, "fees")
+                currency = str(item["row"].get("currency") or "未标注")
+                try:
+                    amount = Decimal(str(item["row"].get("amount")))
+                except (InvalidOperation, ValueError) as exc:
+                    raise ContractError(
+                        "normalized_output_schema_mismatch", "fee amount is not decimal"
+                    ) from exc
+                if not amount.is_finite():
+                    raise ContractError(
+                        "normalized_output_schema_mismatch", "fee amount is not finite"
+                    )
+                item["bucket"]["fees"][currency] += amount
+        with path.open("rb") as stream:
+            for raw in ijson.items(stream, "decisions.item", use_float=True):
+                item = instrument_bucket(raw, "decisions")
+                item["bucket"]["decision_count"] += 1
+                payload = item["row"].get("payload")
+                reason = (
+                    str(payload.get("reason") or "未标注")
+                    if isinstance(payload, Mapping)
+                    else "未标注"
+                )
+                if reason not in reasons and len(reasons) >= MAX_ANALYTICS_GROUPS - 1:
+                    reason = "其他原因"
+                reasons[reason] += 1
+        rows = []
+        fee_totals: dict[str, Decimal] = defaultdict(Decimal)
+        for instrument, values in sorted(instruments.items()):
+            fees = {
+                currency: WorkspaceFormalRunAdapter._decimal_text(amount)
+                for currency, amount in sorted(values["fees"].items())
+            }
+            for currency, amount in values["fees"].items():
+                fee_totals[currency] += amount
+            rows.append(
+                {
+                    "instrument": instrument,
+                    "order_count": values["order_count"],
+                    "fill_count": values["fill_count"],
+                    "buy_fill_count": values["buy_fill_count"],
+                    "sell_fill_count": values["sell_fill_count"],
+                    "position_event_count": values["position_event_count"],
+                    "decision_count": values["decision_count"],
+                    "fees": fees,
+                }
+            )
+        rows.sort(key=lambda item: (-int(item["fill_count"]), str(item["instrument"])))
+        return {
+            "instruments": rows,
+            "fee_totals": {
+                currency: WorkspaceFormalRunAdapter._decimal_text(amount)
+                for currency, amount in sorted(fee_totals.items())
+            },
+            "decision_reasons": [
+                {"reason": reason, "count": count}
+                for reason, count in sorted(reasons.items(), key=lambda item: (-item[1], item[0]))
+            ],
+            "commission_tags": [
+                {"tag": tag, "count": count}
+                for tag, count in sorted(
+                    commission_tags.items(), key=lambda item: (-item[1], item[0])
+                )
+            ],
+        }
 
     @staticmethod
     def _top_level_keys(path: Path) -> set[str]:

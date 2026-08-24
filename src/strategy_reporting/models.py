@@ -208,6 +208,7 @@ class FormalRunReport(StrictModel):
     execution: dict[str, TablePreview]
     quality: dict[str, Any]
     execution_performance: dict[str, Any]
+    analytics: dict[str, Any] = Field(default_factory=dict)
     source_artifacts: list[ArtifactRef]
 
 

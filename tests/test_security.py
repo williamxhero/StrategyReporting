@@ -23,7 +23,7 @@ def test_malicious_formal_values_are_escaped(workspace: FakeWorkspace) -> None:
     assert "&lt;img src=x onerror=" in page
 
 
-def test_malicious_research_title_is_escaped(workspace: FakeWorkspace) -> None:
+def test_malicious_research_title_is_not_exposed_as_report_copy(workspace: FakeWorkspace) -> None:
     report = ReportingApplication(workspace).render_report(
         "research-study", add_apex_source(workspace), ReportOptions()
     )
@@ -32,7 +32,7 @@ def test_malicious_research_title_is_escaped(workspace: FakeWorkspace) -> None:
     )
     page = workspace.contents[html_ref.sha256].decode("utf-8")
     assert "<script>研究</script>" not in page
-    assert "&lt;script&gt;研究&lt;/script&gt;" in page
+    assert "&lt;script&gt;研究&lt;/script&gt;" not in page
 
 
 @pytest.mark.parametrize(

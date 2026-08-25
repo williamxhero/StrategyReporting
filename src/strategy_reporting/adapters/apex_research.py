@@ -320,8 +320,9 @@ class ApexResearchPublicationAdapter:
             )
         if options.decision_id and options.decision_id != source.decision.decision_id:
             raise SourceError("decision_not_found", f"decision not found: {options.decision_id}")
+        strategy_id = source.protocol.strategy_package.strategy_id
         return ResearchStudyReport(
-            title=f"{source.protocol.title or source.protocol.protocol_id} · 研究报告",
+            title=f"{strategy_id} · 研究报告",
             subject=ResearchSubject(
                 study_id=source.study_id,
                 decision_id=source.decision.decision_id,
@@ -410,7 +411,7 @@ class ApexResearchPublicationAdapter:
         from strategy_reporting.publishing import WorkspaceReportPublisher
 
         publisher = WorkspaceReportPublisher(self.workspace)
-        validated: list[tuple[str, FormalRunReport]] = []
+        validated: list[tuple[str, FormalRunReport, str]] = []
         for raw in reports:
             report_id = str(raw.get("record_id", ""))
             publication = publisher.inspect(report_id)
@@ -438,14 +439,17 @@ class ApexResearchPublicationAdapter:
                     "formal_link_model_invalid", f"formal report model is invalid: {report_id}"
                 ) from exc
             publisher.verify_semantic_descriptor(publication.publication, model, content)
-            validated.append((report_id, model))
+            validated.append((report_id, model, publication.envelope.generated_at.isoformat()))
         links: list[dict[str, Any]] = []
         for run_id in run_ids:
-            matches = [
-                report_id
-                for report_id, model in validated
-                if model.subject.workspace_run_id == run_id
-            ]
+            latest_by_formal: dict[str, tuple[str, str]] = {}
+            for report_id, model, generated_at in validated:
+                if model.subject.workspace_run_id != run_id:
+                    continue
+                previous = latest_by_formal.get(model.subject.formal_id)
+                if previous is None or (generated_at, report_id) > (previous[1], previous[0]):
+                    latest_by_formal[model.subject.formal_id] = (report_id, generated_at)
+            matches = sorted(item[0] for item in latest_by_formal.values())
             links.append(
                 {
                     "workspace_run_id": run_id,

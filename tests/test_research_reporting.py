@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 
 import pytest
-from conftest import FakeWorkspace, add_apex_source
+from conftest import FakeWorkspace, add_apex_source, add_formal_run
 
 from strategy_reporting.application import ReportingApplication
 from strategy_reporting.canonical import canonical_sha256
@@ -37,6 +37,29 @@ def test_research_report_maps_discovery_when_present(workspace: FakeWorkspace) -
         item for item in report.envelope.artifacts if item.logical_role == "report-model"
     )
     assert '"discovery":{"items":["' in workspace.contents[model_ref.sha256].decode("utf-8")
+
+
+def test_research_report_prefers_latest_renderer_for_one_formal_leg(
+    workspace: FakeWorkspace,
+) -> None:
+    app = ReportingApplication(workspace)
+    run_id = "run_apex_1"
+    app.render_report("formal-run", add_formal_run(workspace, run_id=run_id), ReportOptions())
+    workspace.created_at = "2026-08-24T01:02:04Z"
+    app.renderers._formal.renderer_version += "+new"
+    latest = app.render_report("formal-run", run_id, ReportOptions())
+    report = app.render_report("research-study", add_apex_source(workspace), ReportOptions())
+    model_ref = next(
+        item for item in report.envelope.artifacts if item.logical_role == "report-model"
+    )
+    model = json.loads(workspace.contents[model_ref.sha256])
+    assert model["related_formal_reports"] == [
+        {
+            "report_ids": [latest.envelope.report_id],
+            "status": "rendered",
+            "workspace_run_id": run_id,
+        }
+    ]
 
 
 def test_missing_apex_source_never_falls_back_to_markdown(workspace: FakeWorkspace) -> None:

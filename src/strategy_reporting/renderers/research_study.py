@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import json
-
 from markupsafe import Markup
 
 from strategy_reporting.canonical import canonical_json
 from strategy_reporting.errors import RenderError
 from strategy_reporting.html.assets import stylesheet
+from strategy_reporting.html.presentation import research_view
 from strategy_reporting.html.security import stylesheet_csp, validate_html
 from strategy_reporting.models import ReportModel, ReportOptions, ResearchStudyReport
 from strategy_reporting.renderers.formal_run import _environment
@@ -14,7 +13,7 @@ from strategy_reporting.renderers.interface import RenderedArtifact, RenderedBun
 
 
 class ResearchStudyRenderer:
-    renderer_version = "research-html.v1+template.2+csp.1"
+    renderer_version = "research-html.v1+template.6+csp.1"
 
     def render(self, model: ReportModel, options: ReportOptions) -> RenderedBundle:
         if not isinstance(model, ResearchStudyReport):
@@ -33,16 +32,7 @@ class ResearchStudyRenderer:
                 theme=options.theme,
                 stylesheet=Markup(css),
                 csp=stylesheet_csp(css),
-                protocol=_pretty(model.protocol),
-                evidence=_pretty(model.evidence),
-                metrics=_pretty(model.research_metrics),
-                trial_views=[(trial, _pretty(trial)) for trial in model.trials],
-                sections=(
-                    ("Discovery", model.discovery),
-                    ("稳健性", model.robustness),
-                    ("敏感性", model.sensitivity),
-                    ("容量", model.capacity),
-                ),
+                view=research_view(model),
             )
             .encode("utf-8")
         )
@@ -69,9 +59,3 @@ class ResearchStudyRenderer:
                 ),
             ),
         )
-
-
-def _pretty(value: object) -> str:
-    if hasattr(value, "model_dump"):
-        value = value.model_dump(mode="json")
-    return json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True, indent=2)

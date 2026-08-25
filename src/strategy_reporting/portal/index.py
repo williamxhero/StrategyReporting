@@ -85,9 +85,19 @@ class PortalBuilder:
             ]
             if len(html_refs) != 1:
                 raise ContractError("portal_html_ambiguous", f"report HTML ambiguous: {report_id}")
-            destination = self._destination(root, Path("reports") / report_id / "index.html")
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            self.workspace.materialize_verified(html_refs[0].model_dump(mode="json"), destination)
+            native_refs = [
+                item
+                for item in publication.envelope.artifacts
+                if item.logical_role == "native-tearsheet-html"
+            ]
+            if len(native_refs) > 1:
+                raise ContractError(
+                    "portal_native_tearsheet_ambiguous",
+                    f"native tearsheet HTML ambiguous: {report_id}",
+                )
+            native_tearsheet_href: str | None = None
+            if native_refs:
+                native_tearsheet_href = f"reports/{report_id}/nautilus-tearsheet.html"
             entries.append(
                 {
                     "report_id": report_id,
@@ -97,11 +107,18 @@ class PortalBuilder:
                     "title": descriptor.title,
                     "created_at": record.get("created_at"),
                     "href": f"reports/{report_id}/index.html",
+                    "native_tearsheet_href": native_tearsheet_href,
                     "lineage": record.get("lineage", []),
+                    "_html_ref": html_refs[0].model_dump(mode="json"),
+                    "_native_tearsheet_ref": (
+                        native_refs[0].model_dump(mode="json") if native_refs else None
+                    ),
+                    "_publication_subject": descriptor.subject_id,
                     "_package": package,
                     **internal,
                 }
             )
+        entries = _latest_subject_entries(entries)
         entries.sort(
             key=lambda item: (
                 str(item["strategy_id"]),
@@ -110,6 +127,18 @@ class PortalBuilder:
             ),
             reverse=True,
         )
+        for entry in entries:
+            destination = self._destination(
+                root, Path("reports") / str(entry["report_id"]) / "index.html"
+            )
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            self.workspace.materialize_verified(entry["_html_ref"], destination)
+            native_ref = entry["_native_tearsheet_ref"]
+            if native_ref is not None:
+                native_destination = self._destination(
+                    root, Path("reports") / str(entry["report_id"]) / "nautilus-tearsheet.html"
+                )
+                self.workspace.materialize_verified(native_ref, native_destination)
         packages = _package_groups(entries)
         public_entries = [_public_entry(item) for item in entries]
         portal_model = {
@@ -159,9 +188,9 @@ def _portal_html(packages: list[dict[str, Any]]) -> str:
         formal_sections = "".join(
             f"<h4>{label}</h4><ul>{''.join(_entry_item(item) for item in formal[key]) or '<li>无</li>'}</ul>"
             for key, label in (
-                ("baseline_reference", "Baseline / Reference"),
-                ("challenge_window", "Challenge window"),
-                ("parameter_config_variants", "Parameter / config variants"),
+                ("baseline_reference", "基准/参考运行"),
+                ("challenge_window", "挑战区间"),
+                ("parameter_config_variants", "参数/配置变体"),
             )
         )
         availability = package["discovery_availability"]
@@ -169,10 +198,10 @@ def _portal_html(packages: list[dict[str, Any]]) -> str:
         reason = html.escape(str(availability.get("reason") or ""))
         package_name = html.escape(str(package["package"]["strategy_id"]))
         sections.append(
-            f"<section><h2>{package_name}</h2><h3>最新 Research Study Report</h3>{latest_html}"
-            f"<h3>历史 Research Study Reports</h3><ul>{history}</ul>"
-            f"<h3>Formal Run Reports</h3>{formal_sections}"
-            f"<h3>Discovery availability</h3><p>{discovery} {reason}</p></section>"
+            f"<section><h2>{package_name}</h2><h3>最新研究报告</h3>{latest_html}"
+            f"<h3>历史研究报告</h3><ul>{history}</ul>"
+            f"<h3>正式运行报告</h3>{formal_sections}"
+            f"<h3>探索可用性</h3><p>{discovery} {reason}</p></section>"
         )
     empty = "<p>当前没有已发布报告。</p>" if not sections else ""
     return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'"><title>Strategy Reporting Portal</title><style>body{{font:15px/1.6 system-ui;margin:40px auto;max-width:980px;padding:0 24px;color:#18211d;background:#f7f5ef}}section{{background:white;padding:18px;margin:14px 0;border:1px solid #d8ddd9}}a{{color:#176b4d}}small{{color:#647069}}</style></head><body><h1>Strategy Reporting Portal</h1>{empty}{"".join(sections)}</body></html>"""
@@ -185,6 +214,17 @@ def _package_identity(raw: Any) -> dict[str, Any]:
         "revision": value.get("revision"),
         "package_hash": value.get("package_hash"),
     }
+
+
+def _latest_subject_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Hide superseded renderer revisions for one immutable report subject."""
+    latest: dict[str, dict[str, Any]] = {}
+    for item in entries:
+        subject = str(item["_publication_subject"])
+        previous = latest.get(subject)
+        if previous is None or _publication_order(item) > _publication_order(previous):
+            latest[subject] = item
+    return list(latest.values())
 
 
 def _package_groups(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -291,4 +331,9 @@ def _entry_link(item: dict[str, Any]) -> str:
     href = html.escape(str(item["href"]), quote=True)
     title = html.escape(str(item["title"]))
     created = html.escape(str(item["created_at"]))
-    return f'<a href="{href}">{title}</a> <small>{created}</small>'
+    native = item.get("native_tearsheet_href")
+    native_link = ""
+    if native:
+        native_href = html.escape(str(native), quote=True)
+        native_link = f' · <a href="{native_href}">净值/回撤图</a>'
+    return f'<a href="{href}">{title}</a>{native_link} <small>{created}</small>'

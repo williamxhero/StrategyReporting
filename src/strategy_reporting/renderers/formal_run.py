@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import json
 from importlib.resources import files
-from typing import Any
 
 from jinja2 import Environment, StrictUndefined, select_autoescape
 from markupsafe import Markup
@@ -10,6 +8,7 @@ from markupsafe import Markup
 from strategy_reporting.canonical import canonical_json
 from strategy_reporting.errors import RenderError
 from strategy_reporting.html.assets import stylesheet
+from strategy_reporting.html.presentation import formal_view
 from strategy_reporting.html.security import stylesheet_csp, validate_html
 from strategy_reporting.models import FormalRunReport, ReportModel, ReportOptions
 from strategy_reporting.renderers.interface import RenderedArtifact, RenderedBundle
@@ -17,7 +16,7 @@ from strategy_reporting.renderers.nautilus_tearsheet import NativeTearsheetRende
 
 
 class FormalRunRenderer:
-    renderer_version = "formal-html.v1+template.2+csp.2+nautilus.1.231.0"
+    renderer_version = "formal-html.v1+template.5+csp.2+nautilus.1.231.0"
 
     def __init__(self) -> None:
         self.native = NativeTearsheetRenderer()
@@ -35,11 +34,7 @@ class FormalRunRenderer:
             theme=options.theme,
             stylesheet=Markup(css),
             csp=stylesheet_csp(css),
-            metric_groups=(
-                ("PnL", model.performance.stats_pnls),
-                ("Returns", model.performance.stats_returns),
-                ("General", model.performance.stats_general),
-            ),
+            view=formal_view(model),
             labels={
                 "orders": "订单",
                 "fills": "成交",
@@ -61,9 +56,6 @@ class FormalRunRenderer:
                     ("decisions", "策略决策"),
                 )
             ],
-            run_info=_pretty(model.run_info),
-            account_info=_pretty(model.account_info),
-            quality=_pretty(model.quality),
         ).encode("utf-8")
         validate_html(html, maximum_bytes=options.max_html_bytes)
         native = self.native.render(model, options)
@@ -101,7 +93,3 @@ def _environment() -> Environment:
         autoescape=select_autoescape(enabled_extensions=("html", "j2"), default=True),
         undefined=StrictUndefined,
     )
-
-
-def _pretty(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, allow_nan=False, sort_keys=True, indent=2)

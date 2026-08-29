@@ -40,21 +40,16 @@ def test_portal_groups_and_materializes_reports(workspace: FakeWorkspace, tmp_pa
     assert formal_package["formal_runs"]["parameter_config_variants"] == []
     assert research_package["discovery_availability"]["status"] == "not_evaluated"
     assert (tmp_path / "portal" / "reports" / formal.envelope.report_id / "index.html").is_file()
-    assert (
-        tmp_path / "portal" / "reports" / formal.envelope.report_id / "nautilus-tearsheet.html"
-    ).is_file()
     assert (tmp_path / "portal" / "reports" / research.envelope.report_id / "index.html").is_file()
     assert (
         tmp_path / "portal" / "reports" / research_history.envelope.report_id / "index.html"
     ).is_file()
-    assert len(list((tmp_path / "portal" / "reports").iterdir())) == result["report_count"]
     index = (tmp_path / "portal" / "index.html").read_text(encoding="utf-8")
     assert "https://" not in index and "http://" not in index
-    assert "最新研究报告" in index
-    assert "历史研究报告" in index
-    assert "挑战区间" in index
-    assert "探索可用性" in index
-    assert "净值/回撤图" in index
+    assert "最新 Research Study Report" in index
+    assert "历史 Research Study Reports" in index
+    assert "Challenge window" in index
+    assert "Discovery availability" in index
 
 
 def test_empty_portal_is_valid(workspace: FakeWorkspace, tmp_path) -> None:
@@ -214,6 +209,30 @@ def test_portal_merges_historical_roles_and_latest_wins_conflicts() -> None:
     ]
     assert [item["report_id"] for item in group["formal_runs"]["baseline_reference"]] == [
         "formal-shared"
+    ]
+
+
+def test_portal_shows_only_latest_renderer_for_same_workspace_run() -> None:
+    package = {"strategy_id": "s", "revision": 1, "package_hash": "p"}
+    entries = [
+        {
+            "report_id": "latest-renderer",
+            "report_kind": "formal-run",
+            "created_at": "2026-02-01T00:00:00Z",
+            "_package": package,
+            "_workspace_run_id": "same-run",
+        },
+        {
+            "report_id": "older-renderer",
+            "report_kind": "formal-run",
+            "created_at": "2026-01-01T00:00:00Z",
+            "_package": package,
+            "_workspace_run_id": "same-run",
+        },
+    ]
+    group = _package_groups(entries)[0]
+    assert [item["report_id"] for item in group["formal_runs"]["baseline_reference"]] == [
+        "latest-renderer"
     ]
 
 

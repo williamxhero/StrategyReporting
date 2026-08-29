@@ -39,6 +39,38 @@ def test_research_report_maps_discovery_when_present(workspace: FakeWorkspace) -
     assert '"discovery":{"items":["' in workspace.contents[model_ref.sha256].decode("utf-8")
 
 
+def test_research_html_is_a_human_decision_report_without_raw_payload_dumps(
+    workspace: FakeWorkspace,
+) -> None:
+    report = ReportingApplication(workspace).render_report(
+        "research-study", add_apex_source(workspace), ReportOptions()
+    )
+    html_ref = next(
+        item for item in report.envelope.artifacts if item.logical_role == "report-html"
+    )
+    page = workspace.contents[html_ref.sha256].decode("utf-8")
+    assert "结论的含义" in page
+    assert "accept 不可以说明什么" in page
+    assert "1 项冻结门槛" in page
+    assert "<pre" not in page
+    assert '"formal_legs"' not in page
+
+
+def test_research_model_carries_verified_formal_report_context(
+    workspace: FakeWorkspace,
+) -> None:
+    run_id = add_formal_run(workspace, run_id="run_apex_1")
+    app = ReportingApplication(workspace)
+    formal = app.render_report("formal-run", run_id, ReportOptions())
+    research = app.render_report("research-study", add_apex_source(workspace), ReportOptions())
+    model_ref = next(
+        item for item in research.envelope.artifacts if item.logical_role == "report-model"
+    )
+    model = workspace.contents[model_ref.sha256].decode("utf-8")
+    assert formal.envelope.report_id in model
+    assert '"snapshot_verification":"verified"' in model
+
+
 def test_research_report_prefers_latest_renderer_for_one_formal_leg(
     workspace: FakeWorkspace,
 ) -> None:
@@ -53,13 +85,11 @@ def test_research_report_prefers_latest_renderer_for_one_formal_leg(
         item for item in report.envelope.artifacts if item.logical_role == "report-model"
     )
     model = json.loads(workspace.contents[model_ref.sha256])
-    assert model["related_formal_reports"] == [
-        {
-            "report_ids": [latest.envelope.report_id],
-            "status": "rendered",
-            "workspace_run_id": run_id,
-        }
-    ]
+    links = model["related_formal_reports"]
+    assert len(links) == 1
+    assert links[0]["workspace_run_id"] == run_id
+    assert links[0]["status"] == "rendered"
+    assert links[0]["report_ids"] == [latest.envelope.report_id]
 
 
 def test_missing_apex_source_never_falls_back_to_markdown(workspace: FakeWorkspace) -> None:

@@ -61,6 +61,7 @@ class PortalBuilder:
                     "_workspace_run_id": formal_model.subject.workspace_run_id,
                     "_parameters": formal_model.strategy.get("parameters", {}),
                     "_snapshot": formal_model.market.get("snapshot", {}),
+                    "summary": _formal_summary(formal_model),
                 }
             else:
                 research_model = ResearchStudyReport.model_validate_json(model_bytes, strict=True)
@@ -73,8 +74,13 @@ class PortalBuilder:
                 subject = research_model.subject.study_id
                 package = _package_identity(research_model.strategy_package)
                 internal = {
+                    "_decision_id": research_model.subject.decision_id,
                     "_trials": research_model.trials,
                     "_discovery": research_model.discovery.model_dump(mode="json"),
+                    "summary": {
+                        "decision_status": research_model.final_decision.get("status"),
+                        "trial_count": len(research_model.trials),
+                    },
                 }
             if strategy_id and entry_strategy_id != strategy_id:
                 continue
@@ -95,9 +101,6 @@ class PortalBuilder:
                     "portal_native_tearsheet_ambiguous",
                     f"native tearsheet HTML ambiguous: {report_id}",
                 )
-            native_tearsheet_href: str | None = None
-            if native_refs:
-                native_tearsheet_href = f"reports/{report_id}/nautilus-tearsheet.html"
             entries.append(
                 {
                     "report_id": report_id,
@@ -107,7 +110,9 @@ class PortalBuilder:
                     "title": descriptor.title,
                     "created_at": record.get("created_at"),
                     "href": f"reports/{report_id}/index.html",
-                    "native_tearsheet_href": native_tearsheet_href,
+                    "native_tearsheet_href": (
+                        f"reports/{report_id}/nautilus-tearsheet.html" if native_refs else None
+                    ),
                     "lineage": record.get("lineage", []),
                     "_html_ref": html_refs[0].model_dump(mode="json"),
                     "_native_tearsheet_ref": (
@@ -136,7 +141,8 @@ class PortalBuilder:
             native_ref = entry["_native_tearsheet_ref"]
             if native_ref is not None:
                 native_destination = self._destination(
-                    root, Path("reports") / str(entry["report_id"]) / "nautilus-tearsheet.html"
+                    root,
+                    Path("reports") / str(entry["report_id"]) / "nautilus-tearsheet.html",
                 )
                 self.workspace.materialize_verified(native_ref, native_destination)
         packages = _package_groups(entries)
@@ -180,31 +186,64 @@ def _portal_html(packages: list[dict[str, Any]]) -> str:
     sections: list[str] = []
     for package in packages:
         latest = package["latest_research"]
-        latest_html = _entry_link(latest) if latest else "<span>无</span>"
+        latest_html = _entry_row(latest) if latest else '<p class="empty">尚无研究报告。</p>'
         history = (
-            "".join(_entry_item(item) for item in package["research_history"]) or "<li>无</li>"
+            "".join(_entry_row(item) for item in package["research_history"])
+            or '<p class="empty">暂无历史版本。</p>'
         )
         formal = package["formal_runs"]
         formal_sections = "".join(
-            f"<h4>{label}</h4><ul>{''.join(_entry_item(item) for item in formal[key]) or '<li>无</li>'}</ul>"
+            f'<div class="report-group"><h4>{label}</h4>'
+            f"{''.join(_entry_row(item) for item in formal[key]) or '<p class="empty">暂无。</p>'}</div>"
             for key, label in (
-                ("baseline_reference", "基准/参考运行"),
-                ("challenge_window", "挑战区间"),
-                ("parameter_config_variants", "参数/配置变体"),
+                ("baseline_reference", "基准 / 参考 · Baseline / Reference"),
+                ("challenge_window", "挑战窗口 · Challenge window"),
+                ("parameter_config_variants", "参数 / 配置变体 · Parameter / config variants"),
             )
         )
         availability = package["discovery_availability"]
         discovery = html.escape(str(availability.get("status", "not_evaluated")))
         reason = html.escape(str(availability.get("reason") or ""))
         package_name = html.escape(str(package["package"]["strategy_id"]))
+        revision = html.escape(str(package["package"].get("revision") or "—"))
         sections.append(
-            f"<section><h2>{package_name}</h2><h3>最新研究报告</h3>{latest_html}"
-            f"<h3>历史研究报告</h3><ul>{history}</ul>"
-            f"<h3>正式运行报告</h3>{formal_sections}"
-            f"<h3>探索可用性</h3><p>{discovery} {reason}</p></section>"
+            f'<section><header class="package-header"><div><span>Strategy package · r{revision}</span>'
+            f'<h2>{package_name}</h2></div><div class="availability">Discovery availability · '
+            f"<strong>{discovery}</strong><small>{reason}</small></div></header>"
+            f'<div class="portal-column"><h3>正式运行报告 <small>Formal Run Reports</small></h3>'
+            f'{formal_sections}</div><div class="portal-column research-column">'
+            f"<h3>最新 Research Study Report</h3>{latest_html}"
+            f"<h3>历史 Research Study Reports</h3>{history}</div></section>"
         )
-    empty = "<p>当前没有已发布报告。</p>" if not sections else ""
-    return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'"><title>Strategy Reporting Portal</title><style>body{{font:15px/1.6 system-ui;margin:40px auto;max-width:980px;padding:0 24px;color:#18211d;background:#f7f5ef}}section{{background:white;padding:18px;margin:14px 0;border:1px solid #d8ddd9}}a{{color:#176b4d}}small{{color:#647069}}</style></head><body><h1>Strategy Reporting Portal</h1>{empty}{"".join(sections)}</body></html>"""
+    empty = '<p class="portal-empty">当前没有已发布报告。</p>' if not sections else ""
+    report_count = sum(
+        len(group) for package in packages for group in package["formal_runs"].values()
+    ) + sum(
+        (1 if package["latest_research"] else 0) + len(package["research_history"])
+        for package in packages
+    )
+    return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>Strategy Reporting Portal</title><style>{_portal_css()}</style></head><body><main><header class="portal-header"><div class="eyebrow">Strategy Reporting · Offline portal</div><h1>策略研究报告库</h1><p>从 Workspace 已验证 publication 构建的离线入口。正式运行、研究结论与历史版本按策略包归档; 不在门户中二次计算任何指标。</p><div class="portal-count"><strong>{report_count}</strong><span>份报告</span><strong>{len(packages)}</strong><span>个策略包</span></div></header>{empty}{"".join(sections)}<footer>确定性构建 · 自包含资源 · Workspace public contract only</footer></main></body></html>"""
+
+
+def _portal_css() -> str:
+    return """
+:root{--ink:#15231d;--muted:#68756f;--paper:#f3f1eb;--surface:#fbfaf6;--line:#cfd5cf;--accent:#1d684e;--soft:#e5ebe6}*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.6 system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}main{width:min(1180px,92vw);margin:auto;padding:70px 0}.portal-header{padding:28px 0 64px;border-bottom:2px solid var(--ink)}.eyebrow,.package-header span{color:var(--accent);font-size:12px;font-weight:750;letter-spacing:.12em;text-transform:uppercase}h1{margin:14px 0 18px;font:650 clamp(42px,7vw,82px)/1 Georgia,"Times New Roman","Microsoft YaHei",serif;letter-spacing:-.04em}.portal-header>p{max-width:720px;color:var(--muted)}.portal-count{display:flex;align-items:baseline;gap:8px 18px;margin-top:30px}.portal-count strong{font-size:25px}.portal-count span{color:var(--muted)}section{display:grid;grid-template-columns:minmax(260px,.7fr) 1.3fr 1fr;gap:44px;padding:54px 0;border-bottom:1px solid var(--line)}.package-header h2{margin:8px 0;font-size:24px;overflow-wrap:anywhere}.availability{margin-top:32px;color:var(--muted);font-size:12px}.availability strong,.availability small{display:block;color:var(--ink);overflow-wrap:anywhere}h3{margin:0 0 18px;font-size:16px}h3 small{display:block;color:var(--muted);font-weight:400}.report-group{margin-bottom:30px}.report-group h4{margin:0 0 8px;color:var(--muted);font-size:11px;letter-spacing:.04em}.report-row{display:block;padding:12px 0;border-top:1px solid var(--line);text-decoration:none}.report-row:hover .report-title{color:var(--accent)}.report-title{display:block;font-weight:700;transition:color .15s ease}.report-meta,.report-scope{display:block;color:var(--muted);font-size:11px}.report-scope{margin-top:4px}.empty,.portal-empty{color:var(--muted)}footer{padding-top:30px;color:var(--muted);font-size:12px}@media(max-width:850px){section{grid-template-columns:1fr 1fr}.package-header{grid-column:1/-1}.research-column{border-left:1px solid var(--line);padding-left:24px}}@media(max-width:560px){main{width:calc(100% - 36px);padding-top:38px}section{grid-template-columns:1fr;gap:30px}.package-header{grid-column:auto}.research-column{border-left:0;padding-left:0}.portal-count{flex-wrap:wrap}}
+"""
+
+
+def _formal_summary(model: FormalRunReport) -> dict[str, Any]:
+    raw_snapshot = model.market.get("snapshot")
+    snapshot: dict[str, Any] = raw_snapshot if isinstance(raw_snapshot, dict) else {}
+    raw_query = snapshot.get("query")
+    query: dict[str, Any] = raw_query if isinstance(raw_query, dict) else {}
+    raw_instruments = query.get("instruments")
+    instruments: list[Any] = raw_instruments if isinstance(raw_instruments, list) else []
+    return {
+        "outcome": model.subject.outcome,
+        "instrument_count": len(instruments),
+        "start": query.get("start"),
+        "end": query.get("end"),
+    }
 
 
 def _package_identity(raw: Any) -> dict[str, Any]:
@@ -217,7 +256,7 @@ def _package_identity(raw: Any) -> dict[str, Any]:
 
 
 def _latest_subject_entries(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Hide superseded renderer revisions for one immutable report subject."""
+    """Keep only the newest renderer publication for one immutable subject."""
     latest: dict[str, dict[str, Any]] = {}
     for item in entries:
         subject = str(item["_publication_subject"])
@@ -240,11 +279,23 @@ def _package_groups(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     result: list[dict[str, Any]] = []
     for key in sorted(grouped):
         items = grouped[key]
-        research = sorted(
+        research_candidates = sorted(
             (item for item in items if item["report_kind"] == "research-study"),
             key=_publication_order,
             reverse=True,
         )
+        research: list[dict[str, Any]] = []
+        seen_decisions: set[tuple[str, str]] = set()
+        for item in research_candidates:
+            fallback = str(item["report_id"])
+            decision_key = (
+                str(item.get("subject", fallback)),
+                str(item.get("_decision_id", fallback)),
+            )
+            if decision_key in seen_decisions:
+                continue
+            seen_decisions.add(decision_key)
+            research.append(item)
         formal = sorted(
             (item for item in items if item["report_kind"] == "formal-run"),
             key=_publication_order,
@@ -258,8 +309,13 @@ def _package_groups(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
             "challenge_window": [],
             "parameter_config_variants": [],
         }
+        seen_workspace_runs: set[str] = set()
         for item in formal:
-            role = roles.get(str(item["_workspace_run_id"]), "baseline_reference")
+            workspace_run_id = str(item["_workspace_run_id"])
+            if workspace_run_id in seen_workspace_runs:
+                continue
+            seen_workspace_runs.add(workspace_run_id)
+            role = roles.get(workspace_run_id, "baseline_reference")
             formal_groups[role].append(_public_entry(item))
         availability = (
             research[0]["_discovery"]
@@ -323,17 +379,31 @@ def _public_entry(item: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in item.items() if not key.startswith("_")}
 
 
-def _entry_item(item: dict[str, Any]) -> str:
-    return f"<li>{_entry_link(item)}</li>"
-
-
-def _entry_link(item: dict[str, Any]) -> str:
+def _entry_row(item: dict[str, Any]) -> str:
     href = html.escape(str(item["href"]), quote=True)
     title = html.escape(str(item["title"]))
     created = html.escape(str(item["created_at"]))
+    raw_summary = item.get("summary")
+    summary: dict[str, Any] = raw_summary if isinstance(raw_summary, dict) else {}
+    if item.get("report_kind") == "formal-run":
+        scope = (
+            f"{summary.get('instrument_count', '—')} 品种 · "
+            f"{summary.get('start', '—')} — {summary.get('end', '—')} · "
+            f"{summary.get('outcome', '—')}"
+        )
+    else:
+        scope = (
+            f"{summary.get('trial_count', '—')} trials · "
+            f"decision {summary.get('decision_status', '—')}"
+        )
     native = item.get("native_tearsheet_href")
-    native_link = ""
-    if native:
-        native_href = html.escape(str(native), quote=True)
-        native_link = f' · <a href="{native_href}">净值/回撤图</a>'
-    return f'<a href="{href}">{title}</a>{native_link} <small>{created}</small>'
+    native_link = (
+        f'<a class="native-link" href="{html.escape(str(native), quote=True)}">净值/回撤图</a>'
+        if native
+        else ""
+    )
+    return (
+        f'<a class="report-row" href="{href}"><span class="report-title">{title}</span>'
+        f'<span class="report-meta">{created}</span>'
+        f'<span class="report-scope">{html.escape(scope)}</span></a>{native_link}'
+    )

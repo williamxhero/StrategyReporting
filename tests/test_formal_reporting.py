@@ -113,6 +113,54 @@ def test_empty_returns_and_empty_execution_are_valid(workspace: FakeWorkspace) -
     assert '"reason":"native_series_empty"' in model
 
 
+def test_formal_report_builds_bounded_portfolio_analytics_and_human_html(
+    workspace: FakeWorkspace,
+) -> None:
+    run_id = add_formal_run(
+        workspace,
+        returns=[
+            {"timestamp": "2026-01-02T00:00:00Z", "value": "0.10"},
+            {"timestamp": "2026-01-03T00:00:00Z", "value": "-0.20"},
+            {"timestamp": "2026-01-04T00:00:00Z", "value": "0.25"},
+        ],
+    )
+    report = ReportingApplication(workspace).render_report("formal-run", run_id, ReportOptions())
+    model_ref = next(
+        item for item in report.envelope.artifacts if item.logical_role == "report-model"
+    )
+    model = json.loads(workspace.contents[model_ref.sha256])
+    path = model["analytics"]["portfolio_path"]
+    assert path["source_point_count"] == 3
+    assert path["max_drawdown"] == "-0.2"
+    assert path["annual_returns"] == [{"return": "0.1", "year": 2026}]
+    assert model["analytics"]["activity"]["instruments"][0]["order_count"] == 1
+
+    html_ref = next(
+        item for item in report.envelope.artifacts if item.logical_role == "report-html"
+    )
+    page = workspace.contents[html_ref.sha256].decode("utf-8")
+    assert "组合路径与回撤" in page
+    assert "与旧版结构报告的差异" in page
+    assert "<svg" in page
+    assert "<pre" not in page
+
+
+def test_assumed_immutable_snapshot_is_not_mislabeled_verified(
+    workspace: FakeWorkspace,
+) -> None:
+    run_id = add_formal_run(workspace)
+    snapshot = workspace.runs[run_id]["request"]["market_snapshot"]
+    snapshot.pop("verification")
+    snapshot["trust_policy"] = "assumed_immutable"
+    report = ReportingApplication(workspace).render_report("formal-run", run_id, ReportOptions())
+    model_ref = next(
+        item for item in report.envelope.artifacts if item.logical_role == "report-model"
+    )
+    model = json.loads(workspace.contents[model_ref.sha256])
+    assert model["market"]["verification_status"] == "assumed_immutable"
+    assert model["quality"]["snapshot_verification"] == "assumed_immutable"
+
+
 def test_single_short_return_series_is_valid(workspace: FakeWorkspace) -> None:
     report = ReportingApplication(workspace).render_report(
         "formal-run",

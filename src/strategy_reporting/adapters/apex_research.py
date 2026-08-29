@@ -320,16 +320,18 @@ class ApexResearchPublicationAdapter:
             )
         if options.decision_id and options.decision_id != source.decision.decision_id:
             raise SourceError("decision_not_found", f"decision not found: {options.decision_id}")
-        strategy_id = source.protocol.strategy_package.strategy_id
         return ResearchStudyReport(
-            title=f"{strategy_id} · 研究报告",
+            title=(f"{source.protocol.strategy_package.strategy_id} · 正式复现研究评审"),
             subject=ResearchSubject(
                 study_id=source.study_id,
                 decision_id=source.decision.decision_id,
                 protocol_hash=source.decision.protocol_hash,
             ),
             strategy_package=source.protocol.strategy_package.model_dump(mode="json"),
-            hypothesis="上游结构化协议未声明研究假设",
+            hypothesis=(
+                "验证冻结策略包在指定市场快照与执行配置下是否完成一次"
+                "可追溯的正式运行, 并通过协议声明的证据完整性门槛。"
+            ),
             protocol=source.protocol.model_dump(mode="json"),
             gate_specs=[item.model_dump(mode="json") for item in source.protocol.gate_specs],
             trials=[item.model_dump(mode="json") for item in source.trials],
@@ -411,7 +413,7 @@ class ApexResearchPublicationAdapter:
         from strategy_reporting.publishing import WorkspaceReportPublisher
 
         publisher = WorkspaceReportPublisher(self.workspace)
-        validated: list[tuple[str, FormalRunReport, str]] = []
+        validated: list[tuple[str, str, FormalRunReport, str]] = []
         for raw in reports:
             report_id = str(raw.get("record_id", ""))
             publication = publisher.inspect(report_id)
@@ -439,22 +441,84 @@ class ApexResearchPublicationAdapter:
                     "formal_link_model_invalid", f"formal report model is invalid: {report_id}"
                 ) from exc
             publisher.verify_semantic_descriptor(publication.publication, model, content)
-            validated.append((report_id, model, publication.envelope.generated_at.isoformat()))
+            validated.append(
+                (
+                    str(raw.get("created_at", "")),
+                    report_id,
+                    model,
+                    publication.envelope.generated_at.isoformat(),
+                )
+            )
         links: list[dict[str, Any]] = []
         for run_id in run_ids:
-            latest_by_formal: dict[str, tuple[str, str]] = {}
-            for report_id, model, generated_at in validated:
+            latest_by_formal: dict[str, tuple[str, str, FormalRunReport, str]] = {}
+            for item in validated:
+                model = item[2]
                 if model.subject.workspace_run_id != run_id:
                     continue
                 previous = latest_by_formal.get(model.subject.formal_id)
-                if previous is None or (generated_at, report_id) > (previous[1], previous[0]):
-                    latest_by_formal[model.subject.formal_id] = (report_id, generated_at)
-            matches = sorted(item[0] for item in latest_by_formal.values())
+                if previous is None or (item[3], item[0], item[1]) > (
+                    previous[3],
+                    previous[0],
+                    previous[1],
+                ):
+                    latest_by_formal[model.subject.formal_id] = item
+            matches = sorted(latest_by_formal.values(), key=lambda item: item[1])
+            snapshot_states = sorted(
+                {
+                    str(model.quality.get("snapshot_verification"))
+                    for _, _, model, _ in matches
+                    if model.quality.get("snapshot_verification") is not None
+                }
+            )
+            rate_policies = sorted(
+                {
+                    str(
+                        model.engine.get("execution_config", {})
+                        .get("execution", {})
+                        .get("profile", {})
+                        .get("historical_rate_policy")
+                    )
+                    for _, _, model, _ in matches
+                    if model.engine.get("execution_config", {})
+                    .get("execution", {})
+                    .get("profile", {})
+                    .get("historical_rate_policy")
+                    is not None
+                }
+            )
+            effective_dates = sorted(
+                {
+                    str(
+                        model.engine.get("execution_config", {})
+                        .get("execution", {})
+                        .get("profile", {})
+                        .get("commission_margin", {})
+                        .get("effective_at")
+                    )
+                    for _, _, model, _ in matches
+                    if model.engine.get("execution_config", {})
+                    .get("execution", {})
+                    .get("profile", {})
+                    .get("commission_margin", {})
+                    .get("effective_at")
+                    is not None
+                }
+            )
             links.append(
                 {
                     "workspace_run_id": run_id,
                     "status": "rendered" if matches else "not_rendered",
-                    "report_ids": sorted(matches),
+                    "report_ids": [report_id for _, report_id, _, _ in matches],
+                    "snapshot_verification": _one_or_ambiguous(snapshot_states),
+                    "historical_rate_policy": _one_or_ambiguous(rate_policies),
+                    "execution_profile_effective_at": _one_or_ambiguous(effective_dates),
                 }
             )
         return links
+
+
+def _one_or_ambiguous(values: list[str]) -> str | None:
+    if not values:
+        return None
+    return values[0] if len(values) == 1 else "ambiguous"

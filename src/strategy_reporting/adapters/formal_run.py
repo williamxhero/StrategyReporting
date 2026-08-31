@@ -58,13 +58,30 @@ NORMALIZED_ROOT_FIELDS = {
     "metrics",
     "normalized_output_hash",
 }
-MAX_NATIVE_STATISTICS_BYTES = 4_000_000
+MAX_NATIVE_STATISTICS_BYTES = 250_000_000
 MAX_EVIDENCE_INDEX_BYTES = 1_000_000
 MAX_NORMALIZED_METRICS_BYTES = 1_000_000
 MAX_NORMALIZED_ROW_BYTES = 1_000_000
 MAX_ANALYTICS_GROUPS = 1_000
 MAX_CHART_POINTS = 720
 ANALYTICS_DECIMAL = Decimal("0.000000000001")
+NATIVE_REPORTING_FIELDS = {
+    "schema",
+    "stats_pnls",
+    "stats_returns",
+    "summary",
+    "total_events",
+    "total_orders",
+    "total_positions",
+    "stats_general",
+    "portfolio_returns",
+    "run_info",
+    "account_info",
+    "extraction",
+    "availability",
+    "unavailable",
+}
+PARTIAL_LINEAGE_FIELDS = {"partial_snapshot_lineage", "partial_stream_verification"}
 
 
 class WorkspaceFormalRunAdapter:
@@ -118,35 +135,18 @@ class WorkspaceFormalRunAdapter:
         self._verify_index(index, formal_id, refs)
         consumed = [ArtifactRef.model_validate(ref) for ref in refs]
 
-        native = as_object(
+        native_full = as_object(
             self.workspace.read_verified_json(
                 selected["native_statistics.json"], maximum_bytes=MAX_NATIVE_STATISTICS_BYTES
             ),
             "native statistics",
         )
-        expected_native_keys = {
-            "schema",
-            "stats_pnls",
-            "stats_returns",
-            "summary",
-            "total_events",
-            "total_orders",
-            "total_positions",
-            "stats_general",
-            "portfolio_returns",
-            "run_info",
-            "account_info",
-            "extraction",
-            "availability",
-            "unavailable",
-        }
-        if (
-            set(native) != expected_native_keys
-            or native.get("schema") != "quant-runtime.nautilus-reporting-input.v1"
-        ):
+        if not self._is_native_reporting_input(native_full):
             raise ContractError(
                 "reporting_input_schema_mismatch", "native reporting input v1 fields differ"
             )
+        native = self._reporting_native_fields(native_full)
+        del native_full
         execution_performance, execution_rows, normalized_facts, activity = self._stream_normalized(
             selected["normalized_output.json"], refs, formal_id, native, options
         )
@@ -577,16 +577,16 @@ class WorkspaceFormalRunAdapter:
                     "normalized_output_schema_mismatch",
                     "normalized output framework version differs",
                 )
-            self._enforce_value_budget(path, "native_statistics", MAX_NATIVE_STATISTICS_BYTES)
             embedded_native = as_object(
                 self._stream_single(path, "native_statistics"),
                 "normalized_output.native_statistics",
             )
-            if canonical_json(embedded_native) != canonical_json(native):
+            if self._reporting_native_fields(embedded_native) != native:
                 raise ContractError(
                     "normalized_native_statistics_mismatch",
                     "normalized output native statistics differ from the dedicated artifact",
                 )
+            del embedded_native
             self._enforce_value_budget(path, "metrics", MAX_NORMALIZED_METRICS_BYTES)
             metrics = as_object(self._stream_single(path, "metrics"), "normalized_output.metrics")
             if len(canonical_json(metrics)) > MAX_NORMALIZED_METRICS_BYTES:
@@ -616,6 +616,21 @@ class WorkspaceFormalRunAdapter:
                     "normalized output hash does not match semantic payload",
                 )
             return metrics, execution, facts, activity
+
+    @staticmethod
+    def _is_native_reporting_input(value: dict[str, Any]) -> bool:
+        keys = set(value)
+        return (
+            (
+                keys == NATIVE_REPORTING_FIELDS
+                or keys == NATIVE_REPORTING_FIELDS | PARTIAL_LINEAGE_FIELDS
+            )
+            and value.get("schema") == "quant-runtime.nautilus-reporting-input.v1"
+        )
+
+    @staticmethod
+    def _reporting_native_fields(value: dict[str, Any]) -> dict[str, Any]:
+        return {key: value[key] for key in NATIVE_REPORTING_FIELDS}
 
     @staticmethod
     def _stream_activity(path: Path) -> dict[str, Any]:

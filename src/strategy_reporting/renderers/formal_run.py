@@ -77,7 +77,7 @@ PARAMETER_LABELS = {
 
 
 class FormalRunRenderer:
-    renderer_version = "formal-html.v2+template.5+csp.2+nautilus.1.231.0"
+    renderer_version = "formal-html.v3+template.5+csp.2+nautilus.1.231.0"
 
     def __init__(self) -> None:
         self.native = NativeTearsheetRenderer()
@@ -145,6 +145,8 @@ def _formal_view(model: FormalRunReport) -> dict[str, Any]:
     execution_config = _mapping(model.engine.get("execution_config"))
     futures_execution = _mapping(execution_config.get("execution"))
     contracts = _mapping(futures_execution.get("contracts"))
+    source = _mapping(snapshot.get("source"))
+    partial_publication = _mapping(source.get("partial_publication"))
     pnl_currency, pnl_metrics = _pnl_metrics(model.performance.stats_pnls)
     max_drawdown = portfolio_path.get("max_drawdown")
     current_scope = (
@@ -260,6 +262,22 @@ def _formal_view(model: FormalRunReport) -> dict[str, Any]:
                 model.execution_performance.get("futures_contract_catalog_dataset_version", "—"),
             ),
             ("原生事件流", _integer(model.execution_performance.get("streamed_native_events"))),
+            *(
+                [
+                    ("覆盖声明", "已发布 accepted intervals; 不声明完整无缺历史"),
+                    (
+                        "缺口处理",
+                        str(
+                            model.execution_performance.get(
+                                "partial_snapshot_missing_bar_semantics", "skip"
+                            )
+                        ),
+                    ),
+                    ("Partial publication", partial_publication.get("dataset_version", "—")),
+                ]
+                if partial_publication
+                else []
+            ),
         ],
         "availability": [
             {
@@ -276,10 +294,10 @@ def _formal_view(model: FormalRunReport) -> dict[str, Any]:
             ("源文件数", model.quality.get("source_file_count", "—")),
         ],
         "legacy_comparison": [
-            ("研究范围", "单品种 · 半年 · 结构验证", current_scope),
+            ("研究范围", "当前正式 run", current_scope),
             (
-                "指标快照",
-                "累计收益率 148.47% · Sharpe 0.78 (旧范围 / 旧口径)",
+                "历史收益对照",
+                "not_evaluated (没有当前可查询、同口径的 canonical 历史运行)",
                 "累计收益率 "
                 + _format_metric("PnL% (total)", pnl_metrics.get("PnL% (total)"))
                 + " · Sharpe "
@@ -290,17 +308,17 @@ def _formal_view(model: FormalRunReport) -> dict[str, Any]:
             ),
             (
                 "回答的问题",
-                "链路与执行结构是否可运行",
-                "长期多品种组合在冻结数据与真实成本语义下如何表现",
+                "历史收益差异不在此报告中推断",
+                "冻结数据、成本语义与原生执行下的当前结果",
             ),
             (
                 "绩效证据",
-                "旧指标不沿用; 也不用于推断本次收益",
+                "旧研究指标不沿用, 也不用于推断本次收益",
                 "Nautilus 原生组合指标、原生每日收益、订单与成交证据",
             ),
             (
                 "可审计性",
-                "局部窗口结构证据",
+                "当前 Workspace run / attempt / snapshot",
                 "run / attempt / snapshot / MarketHub 数据与目录版本全部绑定",
             ),
         ],

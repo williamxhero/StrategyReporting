@@ -235,6 +235,9 @@ class ResearchStudyReport(StrictModel):
     evidence: list[dict[str, Any]]
     research_metrics: dict[str, Any]
     validation: dict[str, Any] | None = Field(default=None, exclude_if=lambda value: value is None)
+    statistical: dict[str, Any] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     robustness: Availability
     sensitivity: Availability
     capacity: Availability

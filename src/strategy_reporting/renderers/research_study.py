@@ -188,6 +188,20 @@ def _research_view(model: ResearchStudyReport) -> dict[str, Any]:
             ],
             "aggregation_policy": validation.get("aggregation_policy"),
         }
+    statistical = _mapping(model.statistical)
+    statistical_view = None
+    if statistical:
+        multiple_testing = _mapping(statistical.get("multiple_testing"))
+        statistical_view = {
+            "assessment_id": statistical.get("assessment_id"),
+            "status": statistical.get("status"),
+            "purge_embargo": _mapping(statistical.get("purge_embargo")),
+            "holm": _mapping(multiple_testing.get("holm")),
+            "benjamini_hochberg": _mapping(
+                multiple_testing.get("benjamini_hochberg")
+            ),
+            "deflated_sharpe": _mapping(statistical.get("deflated_sharpe")),
+        }
     return {
         "strategy_id": model.strategy_package.get("strategy_id") or "unknown",
         "revision": model.strategy_package.get("revision") or "—",
@@ -209,6 +223,7 @@ def _research_view(model: ResearchStudyReport) -> dict[str, Any]:
             (str(key), _display(value)) for key, value in sorted(model.research_metrics.items())
         ],
         "validation": validation_view,
+        "statistical": statistical_view,
         "availability": (
             ("探索阶段", model.discovery),
             ("稳健性", model.robustness),

@@ -17,6 +17,7 @@
       <a href="#run">运行</a>
       <a href="#limits">边界</a>
       {% if view.validation %}<a href="#validation">验证矩阵</a>{% endif %}
+      {% if view.statistical %}<a href="#statistical">Statistical control</a>{% endif %}
       <a href="#evidence">证据</a>
     </div>
   </nav>
@@ -136,6 +137,18 @@
       <details class="disclosure"><summary>{{ group.metric }} <small>{{ group.cells|length }} comparable Runtime facts</small></summary><dl class="plain-list"><div><dt>Group identity</dt><dd class="mono">{{ group.group_id }}</dd></div><div><dt>Values (micros)</dt><dd>{{ group.values_micros|join(', ') }}</dd></div>{% for key, value in group.comparability|dictsort %}<div><dt>{{ key }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl></details>
       {% endfor %}
       <p class="mono">{{ view.validation.evidence_id }} · {{ view.validation.aggregation_policy }}</p>
+    </section>
+    {% endif %}
+
+    {% if view.statistical %}
+    <section class="report-section" id="statistical">
+      <div class="section-heading"><div><span class="section-index">06</span><h2>Statistical control</h2></div><p>Canonical Apex assessment shown without recomputation, gate mutation, or qualification inference.</p></div>
+      <div class="headline-strip" aria-label="Statistical assessment">
+        <div class="headline-metric"><span>Assessment</span><strong>{{ view.statistical.status }}</strong><small>{{ view.statistical.assessment_id }}</small></div>
+        <div class="headline-metric"><span>FWER</span><strong>{{ view.statistical.holm.status }}</strong><small>{{ view.statistical.holm.method }} · m={{ view.statistical.holm.denominator }}</small></div>
+        <div class="headline-metric"><span>FDR</span><strong>{{ view.statistical.benjamini_hochberg.status }}</strong><small>{{ view.statistical.benjamini_hochberg.method }} · m={{ view.statistical.benjamini_hochberg.denominator }}</small></div>
+        <div class="headline-metric"><span>Deflated Sharpe</span><strong>{{ view.statistical.deflated_sharpe.status }}</strong><small>{{ view.statistical.deflated_sharpe.formula }} · {{ view.statistical.deflated_sharpe.reason }}</small></div>
+      </div>
     </section>
     {% endif %}
 

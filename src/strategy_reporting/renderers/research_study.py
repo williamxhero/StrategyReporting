@@ -30,7 +30,7 @@ _OPERATOR_LABELS = {
 
 
 class ResearchStudyRenderer:
-    renderer_version = "research-html.v1+template.3.2+csp.1"
+    renderer_version = "research-html.v1+template.3.3+csp.1"
 
     def render(self, model: ReportModel, options: ReportOptions) -> RenderedBundle:
         if not isinstance(model, ResearchStudyReport):
@@ -166,6 +166,28 @@ def _research_view(model: ResearchStudyReport) -> dict[str, Any]:
             if leg.get("effective_at") is not None
         }
     )
+    validation = _mapping(model.validation)
+    validation_view = None
+    if validation:
+        validation_view = {
+            "evidence_id": validation.get("evidence_id"),
+            "complete": validation.get("complete"),
+            "denominator": validation.get("denominator"),
+            "covered_cells": validation.get("covered_cells"),
+            "status_counts": sorted(_mapping(validation.get("status_counts")).items()),
+            "gaps": _list_of_mappings(validation.get("gaps")),
+            "metric_groups": [
+                {
+                    "metric": group.get("metric"),
+                    "group_id": group.get("group_id"),
+                    "comparability": _mapping(group.get("comparability")),
+                    "cells": _list_of_mappings(group.get("cells")),
+                    "values_micros": _list(group.get("values_micros")),
+                }
+                for group in _list_of_mappings(validation.get("metric_groups"))
+            ],
+            "aggregation_policy": validation.get("aggregation_policy"),
+        }
     return {
         "strategy_id": model.strategy_package.get("strategy_id") or "unknown",
         "revision": model.strategy_package.get("revision") or "—",
@@ -186,6 +208,7 @@ def _research_view(model: ResearchStudyReport) -> dict[str, Any]:
         "research_metrics": [
             (str(key), _display(value)) for key, value in sorted(model.research_metrics.items())
         ],
+        "validation": validation_view,
         "availability": (
             ("探索阶段", model.discovery),
             ("稳健性", model.robustness),

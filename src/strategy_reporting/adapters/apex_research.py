@@ -179,6 +179,91 @@ class SourceAvailability(StrictModel):
     capacity: SourceSectionAvailability
 
 
+class ValidationDenominatorCell(StrictModel):
+    cell: SourceRef
+    state: SourceRef | None
+    status: Literal[
+        "completed",
+        "formally_rejected",
+        "failed",
+        "blocked",
+        "skipped",
+        "missing",
+        "reconciliation_required",
+    ]
+    reason: str = Field(min_length=1)
+
+
+class ValidationMetricGroup(StrictModel):
+    group_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    metric: str = Field(pattern=r"^formal\.nautilus\.metrics\.[a-z0-9_.-]+$")
+    comparability: dict[str, Any]
+    cells: list[SourceRef] = Field(min_length=1)
+    values_micros: list[int] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def verify_identity(self) -> ValidationMetricGroup:
+        if len(self.cells) != len(self.values_micros):
+            raise ValueError("validation metric facts are incomplete")
+        identity = {
+            "schema": "apex-research.validation-metric-group.v1",
+            "metric": self.metric,
+            "comparability": self.comparability,
+            "cells": [item.model_dump(mode="json") for item in self.cells],
+            "values_micros": self.values_micros,
+        }
+        if self.group_id != canonical_sha256(identity):
+            raise ValueError("validation metric group identity differs")
+        return self
+
+
+class ValidationEvidence(StrictModel):
+    schema_id: Literal["apex-research.validation-evidence.v1"] = Field(alias="schema")
+    evidence_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    protocol: SourceRef
+    matrix: SourceRef
+    denominator: int = Field(ge=1, le=10_000)
+    cells: list[ValidationDenominatorCell] = Field(min_length=1, max_length=10_000)
+    status_counts: dict[str, int]
+    covered_cells: int = Field(ge=0, le=10_000)
+    complete: bool
+    gaps: list[dict[str, str]]
+    metric_groups: list[ValidationMetricGroup]
+    aggregation_policy: Literal["runtime-owner-comparable-groups.v1"]
+
+    @model_validator(mode="after")
+    def verify_identity_and_counts(self) -> ValidationEvidence:
+        if self.denominator != len(self.cells) or sum(self.status_counts.values()) != len(
+            self.cells
+        ):
+            raise ValueError("validation evidence denominator differs")
+        if self.covered_cells != sum(
+            item.status in {"completed", "formally_rejected"} for item in self.cells
+        ):
+            raise ValueError("validation evidence coverage differs")
+        if self.complete != all(item.status == "completed" for item in self.cells):
+            raise ValueError("validation evidence completeness differs")
+        if self.evidence_id != canonical_sha256(
+            self.model_dump(mode="json", exclude={"evidence_id"}, by_alias=True)
+        ):
+            raise ValueError("validation evidence identity differs")
+        return self
+
+
+class SourceValidation(StrictModel):
+    source: SourceRef
+    evidence: ValidationEvidence
+
+    @model_validator(mode="after")
+    def verify_source(self) -> SourceValidation:
+        if (
+            self.source.record_type != "apex-research.validation-evidence.v1"
+            or self.source.record_id != self.evidence.evidence_id
+        ):
+            raise ValueError("validation source and evidence identity differ")
+        return self
+
+
 class ApexStudyReportSource(StrictModel):
     schema_id: Literal["apex-research.study-report-source.v1"] = Field(alias="schema")
     source_id: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -190,13 +275,17 @@ class ApexStudyReportSource(StrictModel):
     decision: Decision
     research_metrics: dict[str, Scalar]
     availability: SourceAvailability
+    validation: SourceValidation | None = None
     sources: list[SourceRef] = Field(min_length=1)
     source_record_ids: list[str] = Field(min_length=1)
     workspace_run_ids: list[str] = Field(min_length=1)
 
     @model_validator(mode="after")
     def verify_identity_and_references(self) -> ApexStudyReportSource:
-        if self.source_id != canonical_sha256(self.model_dump(mode="json", exclude={"source_id"})):
+        identity = self.model_dump(mode="json", exclude={"source_id"})
+        if self.validation is None:
+            identity.pop("validation")
+        if self.source_id != canonical_sha256(identity):
             raise ValueError("source_id does not match canonical source payload")
         if self.study_id != self.decision.study_id:
             raise ValueError("source study differs from decision")
@@ -217,6 +306,7 @@ class ApexStudyReportSource(StrictModel):
             *("apex-research.trial.v1" for _ in self.trials),
             *("apex-research.gate-result.v2" for _ in self.gate_results),
             *("apex-research.evidence.v1" for _ in self.evidence),
+            *(("apex-research.validation-evidence.v1",) if self.validation is not None else ()),
             "apex-research.decision.v2",
         ]
         if [item.record_type for item in self.sources] != expected_types:
@@ -225,6 +315,7 @@ class ApexStudyReportSource(StrictModel):
             *(item.source for item in self.trials),
             *(item.source for item in self.gate_results),
             *(item.source for item in self.evidence),
+            *((self.validation.source,) if self.validation is not None else ()),
         ]
         if self.sources[1:-1] != embedded_sources:
             raise ValueError("source refs do not match structured source records")
@@ -320,6 +411,7 @@ class ApexResearchPublicationAdapter:
             )
         if options.decision_id and options.decision_id != source.decision.decision_id:
             raise SourceError("decision_not_found", f"decision not found: {options.decision_id}")
+        validation = self._validation_readback(source.validation)
         return ResearchStudyReport(
             title=(f"{source.protocol.strategy_package.strategy_id} · 正式复现研究评审"),
             subject=ResearchSubject(
@@ -349,6 +441,11 @@ class ApexResearchPublicationAdapter:
             gate_results=[item.model_dump(mode="json") for item in source.gate_results],
             evidence=[item.model_dump(mode="json") for item in source.evidence],
             research_metrics=source.research_metrics,
+            validation=(
+                validation.model_dump(mode="json", by_alias=True)
+                if validation is not None
+                else None
+            ),
             robustness=Availability.model_validate(
                 source.availability.robustness.model_dump(mode="json")
             ),
@@ -380,6 +477,44 @@ class ApexResearchPublicationAdapter:
             workspace_run_ids=source.workspace_run_ids,
         )
 
+    def _validation_readback(
+        self, attachment: SourceValidation | None
+    ) -> ValidationEvidence | None:
+        if attachment is None:
+            return None
+        try:
+            publication = self.workspace.client.get_record(attachment.source.record_id)
+        except Exception as exc:
+            raise SourceError(
+                "validation_evidence_read_failed", "cannot read Apex validation evidence"
+            ) from exc
+        expected_payload = attachment.evidence.model_dump(mode="json", by_alias=True)
+        expected_refs = [
+            attachment.evidence.protocol,
+            attachment.evidence.matrix,
+            *(item.state for item in attachment.evidence.cells if item.state is not None),
+        ]
+        expected_lineage = [
+            {
+                "source_kind": item.record_type,
+                "source_id": item.record_id,
+                "relation": "validation-evidence-input",
+            }
+            for item in expected_refs
+        ]
+        if (
+            publication.get("record_id") != attachment.source.record_id
+            or publication.get("record_type") != attachment.source.record_type
+            or publication.get("payload") != expected_payload
+            or publication.get("lineage") != expected_lineage
+            or publication.get("artifacts") != []
+        ):
+            raise ContractError(
+                "validation_evidence_readback_mismatch",
+                "Apex validation evidence canonical readback differs",
+            )
+        return attachment.evidence
+
     @staticmethod
     def _select_source(records: list[dict[str, Any]], decision_id: str | None) -> dict[str, Any]:
         if decision_id:
@@ -388,6 +523,11 @@ class ApexResearchPublicationAdapter:
                 for record in records
                 if record.get("payload", {}).get("decision", {}).get("decision_id") == decision_id
             ]
+            validation_matches = [
+                record for record in matches if record.get("payload", {}).get("validation")
+            ]
+            if len(validation_matches) == 1:
+                return validation_matches[0]
             if len(matches) != 1:
                 raise SourceError(
                     "decision_not_found", f"expected one source for decision {decision_id}"

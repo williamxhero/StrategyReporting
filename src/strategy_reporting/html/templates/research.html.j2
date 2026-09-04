@@ -16,6 +16,7 @@
       <a href="#gates">门槛</a>
       <a href="#run">运行</a>
       <a href="#limits">边界</a>
+      {% if view.validation %}<a href="#validation">验证矩阵</a>{% endif %}
       <a href="#evidence">证据</a>
     </div>
   </nav>
@@ -120,8 +121,26 @@
       </div>
     </section>
 
+    {% if view.validation %}
+    <section class="report-section" id="validation">
+      <div class="section-heading"><div><span class="section-index">05</span><h2>验证矩阵事实</h2></div><p>以下状态、缺口和可比指标组由 Apex canonical evidence 原样提供；本页不补算指标、不推断 qualification。</p></div>
+      <div class="headline-strip" aria-label="验证矩阵摘要">
+        <div class="headline-metric"><span>完成状态</span><strong>{{ 'complete' if view.validation.complete else 'partial' }}</strong><small>owner-published fact</small></div>
+        <div class="headline-metric"><span>覆盖单元</span><strong>{{ view.validation.covered_cells }} / {{ view.validation.denominator }}</strong><small>含 formally rejected</small></div>
+        {% for status, count in view.validation.status_counts %}<div class="headline-metric"><span>{{ status }}</span><strong>{{ count }}</strong><small>frozen denominator</small></div>{% endfor %}
+      </div>
+      {% if view.validation.gaps %}<div class="availability-list research-availability">
+        {% for gap in view.validation.gaps %}<div><span class="mono">{{ gap.cell_id }}</span><strong class="availability-status {{ gap.status }}">{{ gap.status }}</strong><small>{{ gap.reason }}</small></div>{% endfor %}
+      </div>{% endif %}
+      {% for group in view.validation.metric_groups %}
+      <details class="disclosure"><summary>{{ group.metric }} <small>{{ group.cells|length }} comparable Runtime facts</small></summary><dl class="plain-list"><div><dt>Group identity</dt><dd class="mono">{{ group.group_id }}</dd></div><div><dt>Values (micros)</dt><dd>{{ group.values_micros|join(', ') }}</dd></div>{% for key, value in group.comparability|dictsort %}<div><dt>{{ key }}</dt><dd>{{ value }}</dd></div>{% endfor %}</dl></details>
+      {% endfor %}
+      <p class="mono">{{ view.validation.evidence_id }} · {{ view.validation.aggregation_policy }}</p>
+    </section>
+    {% endif %}
+
     <section class="report-section" id="evidence">
-      <div class="section-heading"><div><span class="section-index">05</span><h2>证据与血缘</h2></div><p>报告仅消费 apex-research.study-report-source.v1 和已验证的 formal report model；不解析 Markdown，不访问 SQLite。</p></div>
+      <div class="section-heading"><div><span class="section-index">{{ '06' if view.validation else '05' }}</span><h2>证据与血缘</h2></div><p>报告仅消费 apex-research.study-report-source.v1 和已验证的 formal report model；不解析 Markdown，不访问 SQLite。</p></div>
       <dl class="plain-list source-summary">
         <div><dt>Study</dt><dd class="mono">{{ model.subject.study_id }}</dd></div>
         <div><dt>Decision</dt><dd class="mono">{{ model.subject.decision_id }}</dd></div>

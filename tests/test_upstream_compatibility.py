@@ -37,7 +37,6 @@ def test_pushed_apex_source_publication_maps_without_private_state(tmp_path: Pat
     sys.path.insert(0, str(apex / "src"))
     try:
         support = _load_support("apex_upstream_support", apex / "tests" / "conftest.py")
-        from apex_research.application import ResearchApplication
         from apex_research.canonical import canonical_sha256 as apex_canonical_sha256
         from apex_research.models import TrialTopology
         from apex_research.state import StudyStateStore
@@ -45,8 +44,12 @@ def test_pushed_apex_source_publication_maps_without_private_state(tmp_path: Pat
         topology = TrialTopology.FORMAL_ONLY
         workspace = support.FakeWorkspace(support.result_value(topology))
         runtime = support.FakeRuntime(workspace)
-        application = ResearchApplication(
-            StudyStateStore(tmp_path / "state"), tmp_path / "workspace", workspace, runtime
+        application = support.TestResearchApplication(
+            StudyStateStore(tmp_path / "state"),
+            tmp_path / "workspace",
+            workspace,
+            runtime,
+            governance=support.FakeGovernance(),
         )
         protocol = support.write_json(
             tmp_path / "protocol.json",

@@ -16,7 +16,7 @@ dependencies = [
   "nautilus_trader[visualization]==1.231.0",
   "pandas>=2.2,<4",
   "pydantic>=2.11,<3",
-  "strategy-workspace==0.1.0",
+  "strategy-workspace>=0.1.0,<0.3",
 ]
 
 [project.optional-dependencies]

@@ -197,9 +197,7 @@ def _research_view(model: ResearchStudyReport) -> dict[str, Any]:
             "status": statistical.get("status"),
             "purge_embargo": _mapping(statistical.get("purge_embargo")),
             "holm": _mapping(multiple_testing.get("holm")),
-            "benjamini_hochberg": _mapping(
-                multiple_testing.get("benjamini_hochberg")
-            ),
+            "benjamini_hochberg": _mapping(multiple_testing.get("benjamini_hochberg")),
             "deflated_sharpe": _mapping(statistical.get("deflated_sharpe")),
         }
     return {

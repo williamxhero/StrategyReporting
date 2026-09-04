@@ -78,7 +78,12 @@ def test_pushed_apex_source_publication_maps_without_private_state(tmp_path: Pat
             {key: value for key, value in zero_payload["decision"].items() if key != "decision_id"}
         )
         zero_payload["source_id"] = apex_canonical_sha256(
-            {key: value for key, value in zero_payload.items() if key != "source_id"}
+            {
+                key: value
+                for key, value in zero_payload.items()
+                if key != "source_id"
+                and not (key in {"validation", "statistical"} and value is None)
+            }
         )
         workspace.publish_record(
             {

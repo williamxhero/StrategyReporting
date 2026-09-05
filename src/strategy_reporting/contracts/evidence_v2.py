@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+from dataclasses import dataclass
 from typing import Any, Literal
 
 from pydantic import Field, model_validator
@@ -12,96 +14,130 @@ from strategy_reporting.models import ArtifactRef, LineageEdge, StrictModel
 Sha256 = str
 InferencePolicy = Literal["forbidden"]
 
-_SOURCE_TYPES = {
-    "apex-research.action-reservation.v1",
-    "apex-research.action-settlement.v1",
-    "apex-research.auxiliary-validation.v1",
-    "apex-research.behavioral-gate-assessment.v1",
-    "apex-research.behavioral-gate-request.v1",
-    "apex-research.campaign-trial-census.v1",
-    "apex-research.campaign.v1",
-    "apex-research.candidate-gate-assessment.v1",
-    "apex-research.candidate-gate-campaign-binding.v1",
-    "apex-research.candidate-gate-policy.v1",
-    "apex-research.dependence-evidence.v1",
-    "apex-research.evidence.v2",
-    "apex-research.factor-candidate.v1",
-    "apex-research.failure.v1",
-    "apex-research.failure.v2",
-    "apex-research.hypothesis.v1",
-    "apex-research.iteration.v2",
-    "apex-research.model-candidate.v1",
-    "apex-research.raw-p-value-evidence.v1",
-    "apex-research.spec-030-evidence-source.v1",
-    "apex-research.spec-032-currency-source.v1",
-    "apex-research.spec-032-revalidation-source.v1",
-    "apex-research.statistical-assessment.v1",
-    "apex-research.statistical-control-policy.v1",
-    "apex-research.statistical-selection-snapshot.v1",
-    "apex-research.statistical-test-family.v1",
-    "apex-research.statistical-test-result.v1",
-    "apex-research.strategy-candidate.v1",
-    "apex-research.strategy-static-gate-assessment.v1",
-    "apex-research.trial.v1",
-    "apex-research.validation-cell-matrix.v1",
-    "apex-research.validation-cell-outcome.v1",
-    "apex-research.validation-cell-state.v1",
-    "apex-research.validation-cell.v1",
-    "apex-research.validation-eligibility.v1",
-    "apex-research.validation-evidence.v1",
-    "apex-research.validation-protocol-matrix.v1",
-    "apex-research.verified-return-series.v1",
-    "quant-research.result.v4",
-    "quant-research.run-record.v1",
+CanonicalOwnerName = Literal["apex_research", "quant_runtime"]
+RecordReferenceShape = Literal["published", "candidate", "runtime"]
+ArtifactClaimShape = Literal["none", "auxiliary", "raw_p_value", "return_series"]
+ScopeBindingShape = Literal["none", "campaign", "campaign_candidate_protocol"]
+
+
+@dataclass(frozen=True, slots=True)
+class EvidenceRecordDescriptor:
+    canonical_owner: CanonicalOwnerName
+    namespace: str | None
+    identity_field: str | None = None
+    reference_shape: RecordReferenceShape = "published"
+    artifact_claim: ArtifactClaimShape = "none"
+    scope_binding: ScopeBindingShape = "none"
+
+
+def _apex(
+    namespace: str | None,
+    identity_field: str | None = None,
+    *,
+    reference_shape: RecordReferenceShape = "published",
+    artifact_claim: ArtifactClaimShape = "none",
+    scope_binding: ScopeBindingShape = "none",
+) -> EvidenceRecordDescriptor:
+    return EvidenceRecordDescriptor(
+        canonical_owner="apex_research",
+        namespace=namespace,
+        identity_field=identity_field,
+        reference_shape=reference_shape,
+        artifact_claim=artifact_claim,
+        scope_binding=scope_binding,
+    )
+
+
+EVIDENCE_RECORD_DESCRIPTORS: Mapping[str, EvidenceRecordDescriptor] = {
+    "apex-research.action-reservation.v1": _apex("statistical.control", "reservation_id"),
+    "apex-research.action-settlement.v1": _apex("statistical.control", "settlement_id"),
+    "apex-research.auxiliary-validation.v1": _apex(
+        "auxiliary.validation",
+        "auxiliary_id",
+        artifact_claim="auxiliary",
+        scope_binding="campaign_candidate_protocol",
+    ),
+    "apex-research.behavioral-gate-assessment.v1": _apex(
+        "candidate_gate.behavioral", "assessment_id"
+    ),
+    "apex-research.behavioral-gate-request.v1": _apex("candidate_gate.behavioral", "request_id"),
+    "apex-research.campaign-trial-census.v1": _apex("statistical.control", "census_id"),
+    "apex-research.campaign.v1": _apex("apex.control", "campaign_id"),
+    "apex-research.candidate-gate-assessment.v1": _apex(
+        "candidate_gate.aggregate", "assessment_id"
+    ),
+    "apex-research.candidate-gate-campaign-binding.v1": _apex(
+        "candidate_gate.policy", "binding_id"
+    ),
+    "apex-research.candidate-gate-policy.v1": _apex("candidate_gate.policy", "policy_id"),
+    "apex-research.dependence-evidence.v1": _apex("statistical.control"),
+    "apex-research.evidence.v2": _apex(None),
+    "apex-research.factor-candidate.v1": _apex(
+        "discovery.non_formal", "revision_id", reference_shape="candidate"
+    ),
+    "apex-research.failure.v1": _apex("apex.control", "failure_id", scope_binding="campaign"),
+    "apex-research.failure.v2": _apex("apex.control", "failure_id", scope_binding="campaign"),
+    "apex-research.hypothesis.v1": _apex("apex.control", "hypothesis_id"),
+    "apex-research.iteration.v2": _apex("apex.control", "iteration_id"),
+    "apex-research.model-candidate.v1": _apex(
+        "discovery.non_formal", "revision_id", reference_shape="candidate"
+    ),
+    "apex-research.raw-p-value-evidence.v1": _apex(
+        "statistical.raw", "evidence_id", artifact_claim="raw_p_value"
+    ),
+    "apex-research.spec-030-evidence-source.v1": _apex(
+        "discovery.co_evolution",
+        "source_id",
+        scope_binding="campaign_candidate_protocol",
+    ),
+    "apex-research.spec-032-currency-source.v1": _apex(
+        "evidence.currency",
+        "source_id",
+        scope_binding="campaign_candidate_protocol",
+    ),
+    "apex-research.spec-032-revalidation-source.v1": _apex(
+        "evidence.revalidation",
+        "source_id",
+        scope_binding="campaign_candidate_protocol",
+    ),
+    "apex-research.statistical-assessment.v1": _apex("statistical.control", "assessment_id"),
+    "apex-research.statistical-control-policy.v1": _apex("statistical.control", "policy_id"),
+    "apex-research.statistical-selection-snapshot.v1": _apex("statistical.control", "selection_id"),
+    "apex-research.statistical-test-family.v1": _apex("statistical.control", "family_id"),
+    "apex-research.statistical-test-result.v1": _apex("statistical.raw"),
+    "apex-research.strategy-candidate.v1": _apex(
+        "strategy.composition", "revision_id", reference_shape="candidate"
+    ),
+    "apex-research.strategy-static-gate-assessment.v1": _apex(
+        "candidate_gate.static", "assessment_id"
+    ),
+    "apex-research.trial.v1": _apex("apex.control", "trial_id"),
+    "apex-research.validation-cell-matrix.v1": _apex("validation.matrix", "matrix_id"),
+    "apex-research.validation-cell-outcome.v1": _apex("validation.matrix", "outcome_id"),
+    "apex-research.validation-cell-state.v1": _apex("validation.matrix", "state_id"),
+    "apex-research.validation-cell.v1": _apex("validation.matrix", "cell_id"),
+    "apex-research.validation-eligibility.v1": _apex("validation.matrix", "eligibility_id"),
+    "apex-research.validation-evidence.v1": _apex("validation.matrix", "evidence_id"),
+    "apex-research.validation-protocol-matrix.v1": _apex("apex.control", "protocol_id"),
+    "apex-research.verified-return-series.v1": _apex(
+        "statistical.deflated_sharpe", "series_id", artifact_claim="return_series"
+    ),
+    "quant-research.result.v4": EvidenceRecordDescriptor(
+        canonical_owner="quant_runtime", namespace="formal.nautilus"
+    ),
+    "quant-research.run-record.v1": EvidenceRecordDescriptor(
+        canonical_owner="quant_runtime",
+        namespace="formal.nautilus",
+        reference_shape="runtime",
+    ),
 }
 
-_CANDIDATE_TYPES = {
-    "apex-research.factor-candidate.v1",
-    "apex-research.model-candidate.v1",
-    "apex-research.strategy-candidate.v1",
-}
 
-_EXPECTED_NAMESPACES = {
-    "apex-research.action-reservation.v1": "statistical.control",
-    "apex-research.action-settlement.v1": "statistical.control",
-    "apex-research.auxiliary-validation.v1": "auxiliary.validation",
-    "apex-research.behavioral-gate-assessment.v1": "candidate_gate.behavioral",
-    "apex-research.behavioral-gate-request.v1": "candidate_gate.behavioral",
-    "apex-research.campaign-trial-census.v1": "statistical.control",
-    "apex-research.campaign.v1": "apex.control",
-    "apex-research.candidate-gate-assessment.v1": "candidate_gate.aggregate",
-    "apex-research.candidate-gate-campaign-binding.v1": "candidate_gate.policy",
-    "apex-research.candidate-gate-policy.v1": "candidate_gate.policy",
-    "apex-research.dependence-evidence.v1": "statistical.control",
-    "apex-research.factor-candidate.v1": "discovery.non_formal",
-    "apex-research.failure.v1": "apex.control",
-    "apex-research.failure.v2": "apex.control",
-    "apex-research.hypothesis.v1": "apex.control",
-    "apex-research.iteration.v2": "apex.control",
-    "apex-research.model-candidate.v1": "discovery.non_formal",
-    "apex-research.raw-p-value-evidence.v1": "statistical.raw",
-    "apex-research.spec-030-evidence-source.v1": "discovery.co_evolution",
-    "apex-research.spec-032-currency-source.v1": "evidence.currency",
-    "apex-research.spec-032-revalidation-source.v1": "evidence.revalidation",
-    "apex-research.statistical-assessment.v1": "statistical.control",
-    "apex-research.statistical-control-policy.v1": "statistical.control",
-    "apex-research.statistical-selection-snapshot.v1": "statistical.control",
-    "apex-research.statistical-test-family.v1": "statistical.control",
-    "apex-research.statistical-test-result.v1": "statistical.raw",
-    "apex-research.strategy-candidate.v1": "strategy.composition",
-    "apex-research.strategy-static-gate-assessment.v1": "candidate_gate.static",
-    "apex-research.trial.v1": "apex.control",
-    "apex-research.validation-cell-matrix.v1": "validation.matrix",
-    "apex-research.validation-cell-outcome.v1": "validation.matrix",
-    "apex-research.validation-cell-state.v1": "validation.matrix",
-    "apex-research.validation-cell.v1": "validation.matrix",
-    "apex-research.validation-eligibility.v1": "validation.matrix",
-    "apex-research.validation-evidence.v1": "validation.matrix",
-    "apex-research.validation-protocol-matrix.v1": "apex.control",
-    "apex-research.verified-return-series.v1": "statistical.deflated_sharpe",
-    "quant-research.result.v4": "formal.nautilus",
-    "quant-research.run-record.v1": "formal.nautilus",
-}
+def evidence_record_descriptor(record_type: str) -> EvidenceRecordDescriptor:
+    try:
+        return EVIDENCE_RECORD_DESCRIPTORS[record_type]
+    except KeyError as exc:
+        raise ValueError("Evidence source record type is unsupported") from exc
 
 
 def _is_sha256(value: str) -> bool:
@@ -140,9 +176,8 @@ class EvidenceRecordRef(StudyRecordRef):
 
     @model_validator(mode="after")
     def verify_shape(self) -> EvidenceRecordRef:
-        if self.record_type not in _SOURCE_TYPES:
-            raise ValueError("Evidence source record type is unsupported")
-        if self.record_type == "quant-research.run-record.v1":
+        descriptor = evidence_record_descriptor(self.record_type)
+        if descriptor.reference_shape == "runtime":
             if not self.attempt_id or not self.request_hash or not self.result_hash:
                 raise ValueError("Runtime run reference is incomplete")
             if not _is_sha256(self.request_hash) or not _is_sha256(self.result_hash):
@@ -151,7 +186,7 @@ class EvidenceRecordRef(StudyRecordRef):
                 value is not None for value in (self.semantic_id, self.family_id, self.revision)
             ):
                 raise ValueError("Runtime run reference carries Candidate fields")
-        elif self.record_type in _CANDIDATE_TYPES:
+        elif descriptor.reference_shape == "candidate":
             if (
                 not _is_sha256(self.record_id)
                 or not self.semantic_id
@@ -209,16 +244,10 @@ class EvidenceSourceRef(StrictModel):
 
     @model_validator(mode="after")
     def verify_owner_namespace(self) -> EvidenceSourceRef:
-        expected_owner = (
-            "quant_runtime"
-            if self.record.record_type
-            in {"quant-research.result.v4", "quant-research.run-record.v1"}
-            else "apex_research"
-        )
-        if self.canonical_owner != expected_owner:
+        descriptor = evidence_record_descriptor(self.record.record_type)
+        if self.canonical_owner != descriptor.canonical_owner:
             raise ValueError("Evidence source canonical owner mismatch")
-        expected_namespace = _EXPECTED_NAMESPACES.get(self.record.record_type)
-        if expected_namespace is None or self.namespace != expected_namespace:
+        if descriptor.namespace is None or self.namespace != descriptor.namespace:
             raise ValueError("Evidence source namespace mismatch")
         return self
 
@@ -1079,7 +1108,7 @@ class EvidenceV2StudySource(StrictModel):
             [
                 item.record
                 for item in self.evidence.sources
-                if item.record.record_type == "quant-research.run-record.v1"
+                if evidence_record_descriptor(item.record.record_type).reference_shape == "runtime"
             ],
             key=lambda item: (item.record_id, item.attempt_id or ""),
         )
@@ -1116,7 +1145,7 @@ class ExternalRecordReadback(StrictModel):
 
     @model_validator(mode="after")
     def exactly_one_kind(self) -> ExternalRecordReadback:
-        is_run = self.reference.record_type == "quant-research.run-record.v1"
+        is_run = evidence_record_descriptor(self.reference.record_type).reference_shape == "runtime"
         if is_run != (self.run is not None and self.result is not None):
             raise ValueError("Runtime readback is incomplete")
         if is_run == (self.publication is not None):

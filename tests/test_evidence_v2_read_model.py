@@ -12,6 +12,7 @@ from strategy_reporting.canonical import canonical_sha256
 from strategy_reporting.contracts.evidence_v2 import (
     EvidenceV2SourceRef,
     EvidenceV2StudySource,
+    evidence_record_descriptor,
 )
 from strategy_reporting.errors import ContractError
 
@@ -80,6 +81,22 @@ def _section(
         "blockers": blockers or [],
         "incompatibilities": incompatibilities or [],
     }
+
+
+def test_evidence_record_descriptor_is_the_single_typed_taxonomy() -> None:
+    candidate = evidence_record_descriptor("apex-research.strategy-candidate.v1")
+    runtime = evidence_record_descriptor("quant-research.run-record.v1")
+    auxiliary = evidence_record_descriptor("apex-research.auxiliary-validation.v1")
+
+    assert candidate.reference_shape == "candidate"
+    assert candidate.namespace == "strategy.composition"
+    assert candidate.identity_field == "revision_id"
+    assert runtime.canonical_owner == "quant_runtime"
+    assert runtime.reference_shape == "runtime"
+    assert auxiliary.artifact_claim == "auxiliary"
+    assert auxiliary.scope_binding == "campaign_candidate_protocol"
+    with pytest.raises(ValueError, match="unsupported"):
+        evidence_record_descriptor("unknown.owner-record.v1")
 
 
 def _fixture(workspace: FakeWorkspace) -> EvidenceV2SourceRef:

@@ -22,46 +22,9 @@ from strategy_reporting.contracts.evidence_v2 import (
     RuntimeFormalEvidence,
     StrategyPackageRef,
     StudyRecordRef,
+    evidence_record_descriptor,
 )
 from strategy_reporting.errors import ContractError, ReportingError, SourceError
-
-_IDENTITY_FIELDS = {
-    "apex-research.action-reservation.v1": "reservation_id",
-    "apex-research.action-settlement.v1": "settlement_id",
-    "apex-research.auxiliary-validation.v1": "auxiliary_id",
-    "apex-research.behavioral-gate-assessment.v1": "assessment_id",
-    "apex-research.behavioral-gate-request.v1": "request_id",
-    "apex-research.campaign-trial-census.v1": "census_id",
-    "apex-research.campaign.v1": "campaign_id",
-    "apex-research.candidate-gate-assessment.v1": "assessment_id",
-    "apex-research.candidate-gate-campaign-binding.v1": "binding_id",
-    "apex-research.candidate-gate-policy.v1": "policy_id",
-    "apex-research.factor-candidate.v1": "revision_id",
-    "apex-research.failure.v1": "failure_id",
-    "apex-research.failure.v2": "failure_id",
-    "apex-research.hypothesis.v1": "hypothesis_id",
-    "apex-research.iteration.v2": "iteration_id",
-    "apex-research.model-candidate.v1": "revision_id",
-    "apex-research.raw-p-value-evidence.v1": "evidence_id",
-    "apex-research.spec-030-evidence-source.v1": "source_id",
-    "apex-research.spec-032-currency-source.v1": "source_id",
-    "apex-research.spec-032-revalidation-source.v1": "source_id",
-    "apex-research.statistical-assessment.v1": "assessment_id",
-    "apex-research.statistical-control-policy.v1": "policy_id",
-    "apex-research.statistical-selection-snapshot.v1": "selection_id",
-    "apex-research.statistical-test-family.v1": "family_id",
-    "apex-research.strategy-candidate.v1": "revision_id",
-    "apex-research.strategy-static-gate-assessment.v1": "assessment_id",
-    "apex-research.trial.v1": "trial_id",
-    "apex-research.validation-cell-matrix.v1": "matrix_id",
-    "apex-research.validation-cell-outcome.v1": "outcome_id",
-    "apex-research.validation-cell-state.v1": "state_id",
-    "apex-research.validation-cell.v1": "cell_id",
-    "apex-research.validation-eligibility.v1": "eligibility_id",
-    "apex-research.validation-evidence.v1": "evidence_id",
-    "apex-research.validation-protocol-matrix.v1": "protocol_id",
-    "apex-research.verified-return-series.v1": "series_id",
-}
 
 
 class EvidenceV2ReadModelBuilder:
@@ -205,11 +168,12 @@ class EvidenceV2ReadModelBuilder:
         records: list[ExternalRecordReadback] = []
         for owner_source in source.evidence.sources:
             reference = owner_source.record
+            descriptor = evidence_record_descriptor(reference.record_type)
             compact = StudyRecordRef(
                 record_id=reference.record_id,
                 record_type=reference.record_type,
             )
-            if reference.record_type == "quant-research.run-record.v1":
+            if descriptor.reference_shape == "runtime":
                 run, result = self._read_runtime(reference, source)
                 records.append(
                     ExternalRecordReadback(
@@ -239,12 +203,13 @@ class EvidenceV2ReadModelBuilder:
         reference: EvidenceRecordRef,
     ) -> None:
         payload = publication.payload
+        descriptor = evidence_record_descriptor(reference.record_type)
         if payload.get("schema") != reference.record_type:
             raise ContractError(
                 "evidence_v2_owner_schema_mismatch",
                 f"owner payload schema differs for {reference.record_id}",
             )
-        identity_field = _IDENTITY_FIELDS.get(reference.record_type)
+        identity_field = descriptor.identity_field
         if identity_field:
             if payload.get(identity_field) != reference.record_id:
                 raise ContractError(
@@ -257,7 +222,7 @@ class EvidenceV2ReadModelBuilder:
                     "evidence_v2_owner_identity_mismatch",
                     f"owner payload hash differs for {reference.record_id}",
                 )
-        if reference.record_type.endswith("-candidate.v1"):
+        if descriptor.reference_shape == "candidate":
             envelope = _mapping(payload.get("envelope"), "Candidate envelope")
             if (
                 payload.get("semantic_id") != reference.semantic_id
@@ -273,23 +238,23 @@ class EvidenceV2ReadModelBuilder:
 
     def _verify_claimed_artifacts(self, publication: PublicationReadback) -> None:
         payload = publication.payload
-        record_type = publication.record_type
+        claim_shape = evidence_record_descriptor(publication.record_type).artifact_claim
         claims: list[tuple[dict[str, Any], list[dict[str, Any]]]] = []
-        if record_type == "apex-research.auxiliary-validation.v1":
+        if claim_shape == "auxiliary":
             claims.append(
                 (
                     _mapping(payload.get("artifact_owner"), "auxiliary artifact owner"),
                     [_mapping(payload.get("artifact"), "auxiliary artifact")],
                 )
             )
-        elif record_type == "apex-research.raw-p-value-evidence.v1":
+        elif claim_shape == "raw_p_value":
             claims.append(
                 (
                     _mapping(payload.get("source"), "raw p-value owner"),
                     _mapping_list(payload.get("input_artifacts"), "raw p-value artifacts"),
                 )
             )
-        elif record_type == "apex-research.verified-return-series.v1":
+        elif claim_shape == "return_series":
             claims.append(
                 (
                     _mapping(payload.get("owner"), "return-series owner"),
@@ -643,6 +608,7 @@ class EvidenceV2ReadModelBuilder:
             if item.publication is None:
                 continue
             record_payload = item.publication.payload
+            descriptor = evidence_record_descriptor(item.reference.record_type)
             if (
                 "campaign_id" in record_payload
                 and record_payload["campaign_id"] != evidence.scope.campaign.record_id
@@ -673,10 +639,7 @@ class EvidenceV2ReadModelBuilder:
                         "evidence_v2_package_scope_mismatch",
                         "owner record strategy-package scope differs",
                     )
-            if (
-                item.reference.record_type.startswith("apex-research.spec-0")
-                or item.reference.record_type == "apex-research.auxiliary-validation.v1"
-            ) and (
+            if descriptor.scope_binding == "campaign_candidate_protocol" and (
                 record_payload.get("campaign") != compact_campaign
                 or record_payload.get("candidate") != compact_candidate
                 or record_payload.get("protocol") != _compact(evidence.scope.protocol)
@@ -686,11 +649,7 @@ class EvidenceV2ReadModelBuilder:
                     "auxiliary or optional evidence scope differs",
                 )
             if (
-                item.reference.record_type
-                in {
-                    "apex-research.failure.v1",
-                    "apex-research.failure.v2",
-                }
+                descriptor.scope_binding == "campaign"
                 and record_payload.get("campaign_id") != evidence.scope.campaign.record_id
             ):
                 raise ContractError(
@@ -703,7 +662,8 @@ class EvidenceV2ReadModelBuilder:
                 (
                     item.run
                     for item in records
-                    if item.reference.record_type == "quant-research.run-record.v1"
+                    if evidence_record_descriptor(item.reference.record_type).reference_shape
+                    == "runtime"
                     and item.reference.record_id == formal.run.record_id
                 ),
                 None,

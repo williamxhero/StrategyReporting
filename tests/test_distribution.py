@@ -35,4 +35,11 @@ def test_templates_and_assets_are_packaged() -> None:
 def test_public_surface_is_deep_and_small() -> None:
     import strategy_reporting
 
-    assert strategy_reporting.__all__ == ["ReportOptions", "ReportPublication", "render_report"]
+    assert strategy_reporting.__all__ == [
+        "BehaviorDescriptorReadModel",
+        "BehaviorDescriptorReadModelBuilder",
+        "BehaviorDescriptorRef",
+        "ReportOptions",
+        "ReportPublication",
+        "render_report",
+    ]

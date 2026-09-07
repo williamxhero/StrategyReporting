@@ -10,7 +10,10 @@ from typing import Any, NoReturn
 
 from pydantic import ValidationError
 
+from strategy_reporting.adapters.behavior_descriptors import BehaviorDescriptorReadModelBuilder
+from strategy_reporting.adapters.workspace import WorkspaceAdapter, production_client
 from strategy_reporting.application import application_for_workspace
+from strategy_reporting.contracts.behavior_descriptors import BehaviorDescriptorRef
 from strategy_reporting.errors import ReportingError
 from strategy_reporting.models import ReportOptions
 from strategy_reporting.portal import PortalBuilder
@@ -55,6 +58,9 @@ def parser() -> StrictParser:
     build = portal_commands.add_parser("build", add_help=False)
     build.add_argument("--strategy-id")
     build.add_argument("--output", required=True, type=Path)
+    behavior = commands.add_parser("behavior", add_help=False)
+    behavior.add_argument("--tier", required=True, choices=("discovery", "formal"))
+    behavior.add_argument("--descriptor-id", required=True)
     return value
 
 
@@ -70,13 +76,23 @@ def main(argv: Sequence[str] | None = None) -> int:
         args = parser().parse_args(list(argv) if argv is not None else None)
         if args.help:
             raise CliUsageError(
-                "use one of render-run, render-study, inspect, verify, rebuild, portal build"
+                "use one of render-run, render-study, inspect, verify, rebuild, portal build, behavior"
             )
         workspace_root = args.workspace or _environment_workspace()
-        app = application_for_workspace(workspace_root)
+        if args.command == "behavior":
+            reference = (
+                BehaviorDescriptorRef.discovery(args.descriptor_id)
+                if args.tier == "discovery"
+                else BehaviorDescriptorRef.formal(args.descriptor_id)
+            )
+            result: Any = BehaviorDescriptorReadModelBuilder(
+                WorkspaceAdapter(production_client(workspace_root))
+            ).read(reference)
+        else:
+            app = application_for_workspace(workspace_root)
         if args.command == "render-run":
             options = _options(args, workspace_root, formal_id=args.formal_id)
-            result: Any = app.render_report("formal-run", args.run_id, options)
+            result = app.render_report("formal-run", args.run_id, options)
         elif args.command == "render-study":
             options = _options(args, workspace_root, decision_id=args.decision_id)
             result = app.render_report("research-study", args.study_id, options)
@@ -88,6 +104,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = app.rebuild(args.report_id)
         elif args.command == "portal" and args.portal_command == "build":
             result = PortalBuilder(app.workspace).build(args.output, strategy_id=args.strategy_id)
+        elif args.command == "behavior":
+            pass
         else:
             raise CliUsageError("unknown command")
         _emit({"ok": True, "result": _json_value(result)})

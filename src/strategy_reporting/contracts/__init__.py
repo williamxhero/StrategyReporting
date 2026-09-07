@@ -10,6 +10,8 @@ from strategy_reporting.models import (
 )
 
 __all__ = [
+    "BehaviorDescriptorReadModel",
+    "BehaviorDescriptorRef",
     "EvidenceV2ReadModel",
     "EvidenceV2SourceRef",
     "EvidenceV2StudySource",
@@ -17,3 +19,7 @@ __all__ = [
     "ReportEnvelope",
     "ResearchStudyReport",
 ]
+from strategy_reporting.contracts.behavior_descriptors import (
+    BehaviorDescriptorReadModel,
+    BehaviorDescriptorRef,
+)

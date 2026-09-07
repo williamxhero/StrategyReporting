@@ -36,9 +36,13 @@ def test_public_surface_is_deep_and_small() -> None:
     import strategy_reporting
 
     assert strategy_reporting.__all__ == [
+        "ArchiveRecordRef",
         "BehaviorDescriptorReadModel",
         "BehaviorDescriptorReadModelBuilder",
         "BehaviorDescriptorRef",
+        "EvidenceArchiveReadModel",
+        "ExplorationArchiveReadModel",
+        "QualityDiversityArchiveReadModelBuilder",
         "ReportOptions",
         "ReportPublication",
         "render_report",

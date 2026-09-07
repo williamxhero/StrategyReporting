@@ -134,9 +134,7 @@ def fixture(workspace: FakeWorkspace) -> tuple[str, str]:
             "kind": "promotion_frontier",
             "plan": {"record_id": plan_id, "record_type": evolution},
             "capacity": 1,
-            "outcomes": [
-                {"record_id": item, "record_type": evolution} for item in outcomes
-            ],
+            "outcomes": [{"record_id": item, "record_type": evolution} for item in outcomes],
             "decisions": [
                 {"outcome": {"record_id": outcomes[0]}, "disposition": "promoted"},
                 {"outcome": {"record_id": outcomes[1]}, "disposition": "held"},

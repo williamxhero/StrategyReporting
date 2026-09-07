@@ -8,9 +8,7 @@ from pydantic import Field
 
 from strategy_reporting.models import StrictModel
 
-EVOLUTION_RECORD_TYPE: Literal["apex-research.evolution.v1"] = (
-    "apex-research.evolution.v1"
-)
+EVOLUTION_RECORD_TYPE: Literal["apex-research.evolution.v1"] = "apex-research.evolution.v1"
 SPEC032_BLOCKER: Literal["SPEC-032 exact currency owner fact unavailable"] = (
     "SPEC-032 exact currency owner fact unavailable"
 )

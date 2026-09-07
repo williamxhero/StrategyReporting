@@ -56,15 +56,11 @@ class EvolutionProgressReadModelBuilder:
                 )
             related = self._related(publications, island.record_id)
             summaries = [self._summary(item) for item in related]
-            generated = [
-                summary for summary in summaries if summary.kind == "descendant"
-            ]
+            generated = [summary for summary in summaries if summary.kind == "descendant"]
             rejected = [
                 summary
                 for summary in summaries
-                if (
-                    summary.kind == "descendant" and summary.status == "rejected"
-                )
+                if (summary.kind == "descendant" and summary.status == "rejected")
                 or (
                     summary.kind == "discovery_outcome"
                     and summary.status in {"rejected", "incomparable", "failed"}
@@ -101,9 +97,7 @@ class EvolutionProgressReadModelBuilder:
             ) from exc
 
     def _evolution_publications(self) -> dict[str, PublicationReadback]:
-        raw = self.workspace.client.list_records(
-            record_type=EVOLUTION_RECORD_TYPE, limit=10_000
-        )
+        raw = self.workspace.client.list_records(record_type=EVOLUTION_RECORD_TYPE, limit=10_000)
         if not isinstance(raw, list):
             raise ContractError(
                 "evolution_listing_invalid", "Workspace evolution listing is not an array"
@@ -125,10 +119,7 @@ class EvolutionProgressReadModelBuilder:
                 raise ContractError("evolution_kind_invalid", "unknown evolution record kind")
             identity_payload = dict(publication.payload)
             identity = identity_payload.pop(identity_field, None)
-            if (
-                identity != publication.record_id
-                or identity != canonical_sha256(identity_payload)
-            ):
+            if identity != publication.record_id or identity != canonical_sha256(identity_payload):
                 raise ContractError(
                     "evolution_identity_mismatch",
                     "evolution payload identity differs from owner publication",
@@ -206,9 +197,7 @@ class EvolutionProgressReadModelBuilder:
                     EvolutionPromotionSummary(
                         outcome_id=str(raw["outcome"]["record_id"]),
                         disposition=cast(
-                            Literal[
-                                "promoted", "held", "incomparable", "not_evaluated"
-                            ],
+                            Literal["promoted", "held", "incomparable", "not_evaluated"],
                             str(raw["disposition"]),
                         ),
                     )
@@ -259,9 +248,7 @@ class EvolutionProgressReadModelBuilder:
             )
         return sorted(result, key=lambda item: item.record_id)
 
-    def _budget_owner_facts(
-        self, publications: list[PublicationReadback]
-    ) -> list[OwnerFactRef]:
+    def _budget_owner_facts(self, publications: list[PublicationReadback]) -> list[OwnerFactRef]:
         references: dict[tuple[str, str], OwnerFactRef] = {}
         for item in publications:
             if item.payload.get("kind") != "lifecycle_event":

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from typing import Any
 
 import pytest
@@ -328,3 +329,25 @@ def test_behavior_cli_emits_one_distinct_json_read_model(monkeypatch, capsys) ->
     assert formal.err == ""
     assert len(formal.out.splitlines()) == 1
     assert json.loads(formal.out)["result"]["presentation_label"] == ("formal evidence descriptor")
+    if os.environ.get("SPEC016_IDENTITY_TRANSCRIPT") == "1":
+        with capsys.disabled():
+            print(
+                "SPEC016_IDENTITY_TRANSCRIPT="
+                + json.dumps(
+                    {
+                        "label": "reporting",
+                        "discovery_read_model_sha256": canonical_sha256(
+                            json.loads(discovery.out)["result"]
+                        ),
+                        "formal_read_model_sha256": canonical_sha256(
+                            json.loads(formal.out)["result"]
+                        ),
+                        "presentation_labels": [
+                            "exploration descriptor",
+                            "formal evidence descriptor",
+                        ],
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )

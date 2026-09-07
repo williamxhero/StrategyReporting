@@ -3,6 +3,11 @@ from strategy_reporting.contracts.evidence_v2 import (
     EvidenceV2SourceRef,
     EvidenceV2StudySource,
 )
+from strategy_reporting.contracts.quality_diversity_archives import (
+    ArchiveRecordRef,
+    EvidenceArchiveReadModel,
+    ExplorationArchiveReadModel,
+)
 from strategy_reporting.models import (
     FormalRunReport,
     ReportEnvelope,
@@ -10,11 +15,14 @@ from strategy_reporting.models import (
 )
 
 __all__ = [
+    "ArchiveRecordRef",
     "BehaviorDescriptorReadModel",
     "BehaviorDescriptorRef",
+    "EvidenceArchiveReadModel",
     "EvidenceV2ReadModel",
     "EvidenceV2SourceRef",
     "EvidenceV2StudySource",
+    "ExplorationArchiveReadModel",
     "FormalRunReport",
     "ReportEnvelope",
     "ResearchStudyReport",

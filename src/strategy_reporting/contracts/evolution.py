@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
@@ -42,11 +42,16 @@ class EvolutionRecordSummary(StrictModel):
     ]
     generation: int | None
     status: str | None
+    source_ids: list[str]
+    owner_payload: dict[str, Any]
 
 
 class EvolutionPromotionSummary(StrictModel):
     outcome_id: str = Field(min_length=1)
+    candidate_id: str = Field(min_length=1)
     disposition: Literal["promoted", "held", "incomparable", "not_evaluated"]
+    observations: list[dict[str, Any]]
+    reason: str = Field(min_length=1)
 
 
 class EvolutionLifecycleSummary(StrictModel):
@@ -54,15 +59,34 @@ class EvolutionLifecycleSummary(StrictModel):
     generation: int = Field(ge=0)
     action: str = Field(min_length=1)
     reason: str = Field(min_length=1)
+    policy: OwnerFactRef
+    archive_snapshot: OwnerFactRef
+    candidate_ids: list[str]
+    owner_refs: list[OwnerFactRef]
 
 
 class EvolutionFormalSummary(StrictModel):
     record_id: Sha256
     candidate_id: str = Field(min_length=1)
+    frontier_id: str = Field(min_length=1)
+    stages: list[dict[str, Any]]
+    evidence_entry: OwnerFactRef | None
+    attachments: dict[str, Any]
     research_validated: Literal["not_evaluated"]
     research_qualified: Literal["not_evaluated"]
     current_evidence_eligibility: Literal["not_evaluated"]
     current_evidence_reason: Literal["SPEC-032 exact currency owner fact unavailable"]
+
+
+class EvolutionArchiveOwnerFact(StrictModel):
+    record_id: str = Field(min_length=1)
+    record_type: Literal[
+        "apex-research.exploration-archive.v1",
+        "apex-research.evidence-archive.v1",
+    ]
+    archive_family: Literal["exploration", "evidence"]
+    kind: str = Field(min_length=1)
+    owner_payload: dict[str, Any]
 
 
 class EvolutionProgressReadModel(StrictModel):
@@ -70,6 +94,10 @@ class EvolutionProgressReadModel(StrictModel):
         default="strategy-reporting.evolution-progress-read-model.v1", alias="schema"
     )
     island: EvolutionIslandRef
+    policy: OwnerFactRef
+    archive_snapshot: OwnerFactRef
+    seed_candidate_ids: list[str]
+    rng: dict[str, Any]
     records: list[EvolutionRecordSummary]
     generated: list[EvolutionRecordSummary]
     rejected_or_incomparable: list[EvolutionRecordSummary]
@@ -78,6 +106,7 @@ class EvolutionProgressReadModel(StrictModel):
     formal_outcomes: list[EvolutionFormalSummary]
     lifecycle_events: list[EvolutionLifecycleSummary]
     budget_owner_facts: list[OwnerFactRef]
+    archive_owner_facts: list[EvolutionArchiveOwnerFact]
     exploration_label: Literal["exploration archive — discovery leaders"]
     evidence_label: Literal["evidence archive — historical formal evidence leaders"]
     current_evidence_eligibility: Literal["not_evaluated"]
@@ -87,6 +116,7 @@ class EvolutionProgressReadModel(StrictModel):
 __all__ = [
     "EVOLUTION_RECORD_TYPE",
     "SPEC032_BLOCKER",
+    "EvolutionArchiveOwnerFact",
     "EvolutionFormalSummary",
     "EvolutionIslandRef",
     "EvolutionLifecycleSummary",

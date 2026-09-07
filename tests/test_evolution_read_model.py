@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from copy import deepcopy
 from typing import Any
 
@@ -227,3 +228,23 @@ def test_evolution_cli_emits_one_deterministic_workspace_only_model(
     assert payload["result"]["formal_outcomes"][0]["research_qualified"] == "not_evaluated"
     assert cli.main(["evolution", "--island-id", island_id]) == 0
     assert capsys.readouterr().out == first.out
+
+
+def test_evolution_reporting_identity_transcript_is_deterministic() -> None:
+    workspace = FakeWorkspace()
+    island_id, _ = fixture(workspace)
+    model = EvolutionProgressReadModelBuilder(
+        WorkspaceAdapter(workspace)  # type: ignore[arg-type]
+    ).read(EvolutionIslandRef(record_id=island_id))
+    transcript = {
+        "model_sha256": canonical_sha256(model.model_dump(mode="json", by_alias=True)),
+        "island_id": island_id,
+        "generated": len(model.generated),
+        "promoted": len(model.promoted),
+        "current_evidence_eligibility": model.current_evidence_eligibility,
+    }
+    if os.environ.get("SPEC018_IDENTITY_TRANSCRIPT") == "1":
+        print(
+            "SPEC018_REPORTING_TRANSCRIPT="
+            + json.dumps(transcript, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        )

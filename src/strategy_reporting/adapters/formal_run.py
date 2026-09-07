@@ -621,12 +621,9 @@ class WorkspaceFormalRunAdapter:
     def _is_native_reporting_input(value: dict[str, Any]) -> bool:
         keys = set(value)
         return (
-            (
-                keys == NATIVE_REPORTING_FIELDS
-                or keys == NATIVE_REPORTING_FIELDS | PARTIAL_LINEAGE_FIELDS
-            )
-            and value.get("schema") == "quant-runtime.nautilus-reporting-input.v1"
-        )
+            keys == NATIVE_REPORTING_FIELDS
+            or keys == NATIVE_REPORTING_FIELDS | PARTIAL_LINEAGE_FIELDS
+        ) and value.get("schema") == "quant-runtime.nautilus-reporting-input.v1"
 
     @staticmethod
     def _reporting_native_fields(value: dict[str, Any]) -> dict[str, Any]:

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from typing import Any
 
 import pytest
@@ -373,3 +374,24 @@ def test_archive_cli_emits_one_deterministic_distinct_json_model(monkeypatch, ca
     assert "current champion" not in second.out
     assert cli.main(["archive", "--family", "evidence", "--record-id", evidence_id]) == 0
     assert capsys.readouterr().out == second.out
+    if os.environ.get("SPEC017_IDENTITY_TRANSCRIPT") == "1":
+        with capsys.disabled():
+            print(
+                "SPEC017_REPORTING_TRANSCRIPT="
+                + json.dumps(
+                    {
+                        "evidence_model_sha256": canonical_sha256(evidence["result"]),
+                        "evidence_record_id": evidence_id,
+                        "exploration_model_sha256": canonical_sha256(exploration["result"]),
+                        "exploration_record_id": exploration_id,
+                        "labels": [
+                            exploration["result"]["presentation_label"],
+                            evidence["result"]["presentation_label"],
+                        ],
+                        "status": evidence["result"]["current_active_eligibility"],
+                    },
+                    ensure_ascii=True,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )

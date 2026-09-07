@@ -11,12 +11,14 @@ from typing import Any, NoReturn
 from pydantic import ValidationError
 
 from strategy_reporting.adapters.behavior_descriptors import BehaviorDescriptorReadModelBuilder
+from strategy_reporting.adapters.evolution import EvolutionProgressReadModelBuilder
 from strategy_reporting.adapters.quality_diversity_archives import (
     QualityDiversityArchiveReadModelBuilder,
 )
 from strategy_reporting.adapters.workspace import WorkspaceAdapter, production_client
 from strategy_reporting.application import application_for_workspace
 from strategy_reporting.contracts.behavior_descriptors import BehaviorDescriptorRef
+from strategy_reporting.contracts.evolution import EvolutionIslandRef
 from strategy_reporting.contracts.quality_diversity_archives import ArchiveRecordRef
 from strategy_reporting.errors import ReportingError
 from strategy_reporting.models import ReportOptions
@@ -68,6 +70,8 @@ def parser() -> StrictParser:
     archive = commands.add_parser("archive", add_help=False)
     archive.add_argument("--family", required=True, choices=("exploration", "evidence"))
     archive.add_argument("--record-id", required=True)
+    evolution = commands.add_parser("evolution", add_help=False)
+    evolution.add_argument("--island-id", required=True)
     return value
 
 
@@ -84,7 +88,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.help:
             raise CliUsageError(
                 "use one of render-run, render-study, inspect, verify, rebuild, portal build, "
-                "behavior, archive"
+                "behavior, archive, evolution"
             )
         workspace_root = args.workspace or _environment_workspace()
         if args.command == "behavior":
@@ -105,6 +109,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = QualityDiversityArchiveReadModelBuilder(
                 WorkspaceAdapter(production_client(workspace_root))
             ).read(archive_reference)
+        elif args.command == "evolution":
+            result = EvolutionProgressReadModelBuilder(
+                WorkspaceAdapter(production_client(workspace_root))
+            ).read(EvolutionIslandRef(record_id=args.island_id))
         else:
             app = application_for_workspace(workspace_root)
         if args.command == "render-run":
@@ -121,7 +129,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = app.rebuild(args.report_id)
         elif args.command == "portal" and args.portal_command == "build":
             result = PortalBuilder(app.workspace).build(args.output, strategy_id=args.strategy_id)
-        elif args.command == "behavior" or args.command == "archive":
+        elif args.command in {"behavior", "archive", "evolution"}:
             pass
         else:
             raise CliUsageError("unknown command")

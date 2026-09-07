@@ -1,4 +1,5 @@
 from strategy_reporting.adapters.behavior_descriptors import BehaviorDescriptorReadModelBuilder
+from strategy_reporting.adapters.evolution import EvolutionProgressReadModelBuilder
 from strategy_reporting.adapters.quality_diversity_archives import (
     QualityDiversityArchiveReadModelBuilder,
 )
@@ -6,6 +7,10 @@ from strategy_reporting.application import render_report
 from strategy_reporting.contracts.behavior_descriptors import (
     BehaviorDescriptorReadModel,
     BehaviorDescriptorRef,
+)
+from strategy_reporting.contracts.evolution import (
+    EvolutionIslandRef,
+    EvolutionProgressReadModel,
 )
 from strategy_reporting.contracts.quality_diversity_archives import (
     ArchiveRecordRef,
@@ -21,6 +26,9 @@ __all__ = [
     "BehaviorDescriptorReadModelBuilder",
     "BehaviorDescriptorRef",
     "EvidenceArchiveReadModel",
+    "EvolutionIslandRef",
+    "EvolutionProgressReadModel",
+    "EvolutionProgressReadModelBuilder",
     "ExplorationArchiveReadModel",
     "QualityDiversityArchiveReadModelBuilder",
     "ReportOptions",

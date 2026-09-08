@@ -15,14 +15,17 @@ from strategy_reporting.adapters.evolution import EvolutionProgressReadModelBuil
 from strategy_reporting.adapters.quality_diversity_archives import (
     QualityDiversityArchiveReadModelBuilder,
 )
+from strategy_reporting.adapters.revalidation import RevalidationReadModelBuilder
 from strategy_reporting.adapters.workspace import WorkspaceAdapter, production_client
 from strategy_reporting.application import application_for_workspace
 from strategy_reporting.contracts.behavior_descriptors import BehaviorDescriptorRef
 from strategy_reporting.contracts.evolution import EvolutionIslandRef
 from strategy_reporting.contracts.quality_diversity_archives import ArchiveRecordRef
+from strategy_reporting.contracts.revalidation import RevalidationRecordRef
 from strategy_reporting.errors import ReportingError
 from strategy_reporting.models import ReportOptions
 from strategy_reporting.portal import PortalBuilder
+from strategy_reporting.renderers.revalidation import RevalidationRenderer
 
 
 class CliUsageError(Exception):
@@ -74,6 +77,9 @@ def parser() -> StrictParser:
     archive.add_argument("--record-id", required=True)
     evolution = commands.add_parser("evolution", add_help=False)
     evolution.add_argument("--island-id", required=True)
+    revalidation = commands.add_parser("revalidation", add_help=False)
+    revalidation.add_argument("--record-id", required=True)
+    revalidation.add_argument("--format", choices=("json", "html"), default="json")
     return value
 
 
@@ -115,6 +121,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = EvolutionProgressReadModelBuilder(
                 WorkspaceAdapter(production_client(workspace_root))
             ).read(EvolutionIslandRef(record_id=args.island_id))
+        elif args.command == "revalidation":
+            result = RevalidationReadModelBuilder(
+                WorkspaceAdapter(production_client(workspace_root))
+            ).read(RevalidationRecordRef(record_id=args.record_id))
+            if args.format == "html":
+                rendered = RevalidationRenderer().render(result)
+                result = {
+                    "model": json.loads(rendered.model_json),
+                    "html": rendered.html.decode("utf-8"),
+                }
         else:
             app = application_for_workspace(workspace_root)
         if args.command == "render-run":
@@ -134,7 +150,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = app.rebuild(args.report_id)
         elif args.command == "portal" and args.portal_command == "build":
             result = PortalBuilder(app.workspace).build(args.output, strategy_id=args.strategy_id)
-        elif args.command in {"behavior", "archive", "evolution"}:
+        elif args.command in {"behavior", "archive", "evolution", "revalidation"}:
             pass
         else:
             raise CliUsageError("unknown command")

@@ -13,6 +13,7 @@ from strategy_reporting.contracts.replication import (
     ReplicationRecordRef,
     ReplicationReportSource,
 )
+from strategy_reporting.contracts.revalidation import RevalidationReadModel, RevalidationRecordRef
 from strategy_reporting.models import (
     FormalRunReport,
     ReplicationStudyReport,
@@ -36,6 +37,8 @@ __all__ = [
     "ReplicationStudyReport",
     "ReportEnvelope",
     "ResearchStudyReport",
+    "RevalidationReadModel",
+    "RevalidationRecordRef",
 ]
 from strategy_reporting.contracts.behavior_descriptors import (
     BehaviorDescriptorReadModel,

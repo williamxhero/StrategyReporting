@@ -6,6 +6,7 @@ from typing import Any
 
 from strategy_reporting.adapters import (
     ApexResearchPublicationAdapter,
+    ReplicationReadModelBuilder,
     WorkspaceAdapter,
     WorkspaceClientPort,
     WorkspaceFormalRunAdapter,
@@ -15,6 +16,7 @@ from strategy_reporting.canonical import bytes_sha256
 from strategy_reporting.errors import ContractError
 from strategy_reporting.models import (
     FormalRunReport,
+    ReplicationStudyReport,
     ReportKind,
     ReportModel,
     ReportOptions,
@@ -39,6 +41,8 @@ class ReportingApplication:
             model = WorkspaceFormalRunAdapter(self.workspace).build_model(subject_id, options)
         elif subject_kind == "research-study":
             model = ApexResearchPublicationAdapter(self.workspace).build_model(subject_id, options)
+        elif subject_kind == "replication-study":
+            model = ReplicationReadModelBuilder(self.workspace).build_model(subject_id, options)
         else:
             raise ContractError("report_kind_invalid", f"unsupported report kind: {subject_kind}")
         bundle = self.renderers.resolve(model).render(model, options)
@@ -93,6 +97,8 @@ class ReportingApplication:
                 return FormalRunReport.model_validate_json(content, strict=True)
             if schema == "strategy-reporting.research-study-report.v1":
                 return ResearchStudyReport.model_validate_json(content, strict=True)
+            if schema == "strategy-reporting.replication-study-report.v1":
+                return ReplicationStudyReport.model_validate_json(content, strict=True)
             raise ValueError(f"unsupported report model schema: {schema}")
         except (json.JSONDecodeError, ValueError) as exc:
             raise ContractError("report_model_invalid", str(exc)) from exc

@@ -9,6 +9,7 @@ from strategy_reporting.errors import ContractError, PublicationError, SourceErr
 from strategy_reporting.models import (
     FormalRunReport,
     LineageEdge,
+    ReplicationStudyReport,
     ReportDescriptor,
     ReportEnvelope,
     ReportIdentity,
@@ -214,9 +215,16 @@ class WorkspaceReportPublisher:
         options: ReportOptions,
     ) -> ReportIdentity:
         if isinstance(model, FormalRunReport):
-            kind: Literal["formal-run", "research-study"] = "formal-run"
+            kind: Literal["formal-run", "research-study", "replication-study"] = "formal-run"
             subject: dict[str, Any] = model.subject.model_dump(mode="json")
             sources = [item.sha256 for item in model.source_artifacts]
+        elif isinstance(model, ReplicationStudyReport):
+            kind = "replication-study"
+            subject = model.subject.model_dump(mode="json")
+            sources = [
+                model.source_publication["record_id"],
+                *(item["record_id"] for item in model.source_records),
+            ]
         else:
             kind = "research-study"
             subject = model.subject.model_dump(mode="json")
@@ -242,6 +250,10 @@ class WorkspaceReportPublisher:
     def _subject_id_for_model(model: ReportModel) -> str:
         if isinstance(model, FormalRunReport):
             return f"workspace-run:{model.subject.workspace_run_id}#attempt:{model.subject.attempt_id}#formal:{model.subject.formal_id}"
+        if isinstance(model, ReplicationStudyReport):
+            return (
+                f"apex-replication:{model.subject.source_id}#decision:{model.subject.decision_id}"
+            )
         return f"apex-study:{model.subject.study_id}#decision:{model.subject.decision_id}"
 
     @staticmethod
@@ -260,6 +272,14 @@ class WorkspaceReportPublisher:
             raw.extend(
                 ("workspace-artifact", item.sha256, "derived-from")
                 for item in model.source_artifacts
+            )
+        elif isinstance(model, ReplicationStudyReport):
+            raw.append(
+                (REPLICATION_SOURCE_KIND, model.source_publication["record_id"], "derived-from")
+            )
+            raw.extend(
+                (item["record_type"], item["record_id"], "derived-from")
+                for item in model.source_records
             )
         else:
             raw.append((APEX_SOURCE_KIND, model.source_publication["record_id"], "derived-from"))
@@ -303,3 +323,4 @@ class WorkspaceReportPublisher:
 
 
 APEX_SOURCE_KIND = "apex-research.study-report-source.v1"
+REPLICATION_SOURCE_KIND = "apex-research.replication-report-source.v1"

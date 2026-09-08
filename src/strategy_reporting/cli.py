@@ -49,7 +49,9 @@ def parser() -> StrictParser:
     _render_options(render_run)
 
     render_study = commands.add_parser("render-study", add_help=False)
-    render_study.add_argument("--study-id", required=True)
+    study_subject = render_study.add_mutually_exclusive_group(required=True)
+    study_subject.add_argument("--study-id")
+    study_subject.add_argument("--replication-source-id")
     render_study.add_argument("--decision-id")
     _render_options(render_study)
 
@@ -120,7 +122,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = app.render_report("formal-run", args.run_id, options)
         elif args.command == "render-study":
             options = _options(args, workspace_root, decision_id=args.decision_id)
-            result = app.render_report("research-study", args.study_id, options)
+            if args.replication_source_id:
+                result = app.render_report("replication-study", args.replication_source_id, options)
+            else:
+                result = app.render_report("research-study", args.study_id, options)
         elif args.command == "inspect":
             result = app.inspect(args.report_id)
         elif args.command == "verify":

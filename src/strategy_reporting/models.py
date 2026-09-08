@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from strategy_reporting.canonical import canonical_sha256, normalize_json
 
-ReportKind = Literal["formal-run", "research-study"]
+ReportKind = Literal["formal-run", "research-study", "replication-study"]
 
 
 class StrictModel(BaseModel):
@@ -248,4 +248,41 @@ class ResearchStudyReport(StrictModel):
     workspace_run_ids: list[str]
 
 
-ReportModel = FormalRunReport | ResearchStudyReport
+class ReplicationSubject(StrictModel):
+    source_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    campaign_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    case_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    decision_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    outcome: Literal["exact", "directional", "failed", "not_reproducible"]
+
+
+class ReplicationStudyReport(StrictModel):
+    schema_id: Literal["strategy-reporting.replication-study-report.v1"] = Field(
+        default="strategy-reporting.replication-study-report.v1", alias="schema"
+    )
+    title: str
+    subject: ReplicationSubject
+    source_metrics: list[dict[str, Any]]
+    legacy_metrics: list[dict[str, Any]]
+    research_assumptions: list[dict[str, Any]]
+    formal_facts: list[dict[str, Any]]
+    differences: list[dict[str, Any]]
+    blocking_prerequisites: list[dict[str, Any]]
+    source_publication: dict[str, str]
+    source_records: list[dict[str, str]]
+
+    @model_validator(mode="after")
+    def verify_outcome_shape(self) -> ReplicationStudyReport:
+        not_reproducible = self.subject.outcome == "not_reproducible"
+        if not_reproducible != bool(self.blocking_prerequisites):
+            raise ValueError("replication prerequisites do not match outcome")
+        if not_reproducible == bool(self.formal_facts):
+            raise ValueError("replication formal facts do not match outcome")
+        if not_reproducible and self.differences:
+            raise ValueError("not_reproducible cannot contain result differences")
+        if not not_reproducible and not self.differences:
+            raise ValueError("executed replication requires classified differences")
+        return self
+
+
+ReportModel = FormalRunReport | ResearchStudyReport | ReplicationStudyReport

@@ -5,6 +5,7 @@ from strategy_reporting.adapters.formal_run import WorkspaceFormalRunAdapter
 from strategy_reporting.adapters.quality_diversity_archives import (
     QualityDiversityArchiveReadModelBuilder,
 )
+from strategy_reporting.adapters.replication import ReplicationReadModelBuilder
 from strategy_reporting.adapters.workspace import WorkspaceAdapter, WorkspaceClientPort
 
 __all__ = [
@@ -12,6 +13,7 @@ __all__ = [
     "BehaviorDescriptorReadModelBuilder",
     "EvidenceV2ReadModelBuilder",
     "QualityDiversityArchiveReadModelBuilder",
+    "ReplicationReadModelBuilder",
     "WorkspaceAdapter",
     "WorkspaceClientPort",
     "WorkspaceFormalRunAdapter",

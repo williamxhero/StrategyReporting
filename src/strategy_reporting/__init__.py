@@ -3,6 +3,7 @@ from strategy_reporting.adapters.evolution import EvolutionProgressReadModelBuil
 from strategy_reporting.adapters.quality_diversity_archives import (
     QualityDiversityArchiveReadModelBuilder,
 )
+from strategy_reporting.adapters.replication import ReplicationReadModelBuilder
 from strategy_reporting.application import render_report
 from strategy_reporting.contracts.behavior_descriptors import (
     BehaviorDescriptorReadModel,
@@ -17,7 +18,12 @@ from strategy_reporting.contracts.quality_diversity_archives import (
     EvidenceArchiveReadModel,
     ExplorationArchiveReadModel,
 )
-from strategy_reporting.models import ReportOptions, ReportPublication
+from strategy_reporting.contracts.replication import (
+    ReplicationReadModel,
+    ReplicationRecordRef,
+    ReplicationReportSource,
+)
+from strategy_reporting.models import ReplicationStudyReport, ReportOptions, ReportPublication
 
 __version__ = "0.1.0"
 __all__ = [
@@ -31,6 +37,11 @@ __all__ = [
     "EvolutionProgressReadModelBuilder",
     "ExplorationArchiveReadModel",
     "QualityDiversityArchiveReadModelBuilder",
+    "ReplicationReadModel",
+    "ReplicationReadModelBuilder",
+    "ReplicationRecordRef",
+    "ReplicationReportSource",
+    "ReplicationStudyReport",
     "ReportOptions",
     "ReportPublication",
     "render_report",

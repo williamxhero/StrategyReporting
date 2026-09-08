@@ -8,8 +8,14 @@ from strategy_reporting.contracts.quality_diversity_archives import (
     EvidenceArchiveReadModel,
     ExplorationArchiveReadModel,
 )
+from strategy_reporting.contracts.replication import (
+    ReplicationReadModel,
+    ReplicationRecordRef,
+    ReplicationReportSource,
+)
 from strategy_reporting.models import (
     FormalRunReport,
+    ReplicationStudyReport,
     ReportEnvelope,
     ResearchStudyReport,
 )
@@ -24,6 +30,10 @@ __all__ = [
     "EvidenceV2StudySource",
     "ExplorationArchiveReadModel",
     "FormalRunReport",
+    "ReplicationReadModel",
+    "ReplicationRecordRef",
+    "ReplicationReportSource",
+    "ReplicationStudyReport",
     "ReportEnvelope",
     "ResearchStudyReport",
 ]

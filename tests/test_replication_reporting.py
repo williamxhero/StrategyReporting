@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
+
 import pytest
 from conftest import FakeWorkspace, add_apex_source
 
 from strategy_reporting.application import ReportingApplication
 from strategy_reporting.canonical import canonical_sha256
-from strategy_reporting.cli import parser
+from strategy_reporting.cli import main, parser
 from strategy_reporting.errors import ContractError
 from strategy_reporting.models import ReportOptions
 
@@ -35,11 +37,15 @@ def _identity(schema: str, field: str, **values: object) -> dict[str, object]:
 
 
 def add_replication_source(workspace: FakeWorkspace, outcome: str) -> str:
+    case_payload = _identity(
+        "apex-research.replication-case.v1",
+        "replication_id",
+    )
     case = _publication(
         workspace,
-        "1" * 64,
+        str(case_payload["replication_id"]),
         "apex-research.replication-case.v1",
-        {"schema": "apex-research.replication-case.v1"},
+        case_payload,
     )
     source_metrics = [
         {
@@ -66,6 +72,22 @@ def add_replication_source(workspace: FakeWorkspace, outcome: str) -> str:
             rationale="frozen assumption",
         )
     ]
+    comparison_policy = _identity(
+        "apex-research.replication-comparison-policy.v1",
+        "policy_id",
+        policy_version="1",
+        criteria=[
+            {
+                "dimension": "metric_definition",
+                "source_selector": "source.metrics.total_return_micros",
+                "formal_selector": "formal.nautilus.metrics.total_return_micros",
+                "mode": "directional" if outcome == "directional" else "exact",
+                "tolerance_micros": 0,
+                "direction": "same_sign" if outcome == "directional" else None,
+            }
+        ],
+        empirical_methods=[],
+    )
     if outcome == "not_reproducible":
         design_type = "apex-research.replication-research-design.v1"
         design_payload = _identity(
@@ -93,6 +115,7 @@ def add_replication_source(workspace: FakeWorkspace, outcome: str) -> str:
             "source_metrics": source_metrics,
             "legacy_metrics": legacy_metrics,
             "research_assumptions": assumptions,
+            "comparison_policy": comparison_policy,
             "formal_facts": [],
         }
         evidence = _identity(evidence_type, "evidence_id", **evidence_values)
@@ -132,11 +155,15 @@ def add_replication_source(workspace: FakeWorkspace, outcome: str) -> str:
                 "runtime_evidence": runtime,
             }
         ]
+        formal_payload = _identity(
+            "apex-research.replication-formal-execution.v1",
+            "execution_id",
+        )
         formal = _publication(
             workspace,
-            "2" * 64,
+            str(formal_payload["execution_id"]),
             "apex-research.replication-formal-execution.v1",
-            {"schema": "apex-research.replication-formal-execution.v1"},
+            formal_payload,
         )
         differences = [
             {
@@ -164,6 +191,7 @@ def add_replication_source(workspace: FakeWorkspace, outcome: str) -> str:
             source_metrics=source_metrics,
             legacy_metrics=legacy_metrics,
             research_assumptions=assumptions,
+            comparison_policy=comparison_policy,
             formal_facts=formal_facts,
             empirical_support=[],
         )
@@ -195,6 +223,7 @@ def add_replication_source(workspace: FakeWorkspace, outcome: str) -> str:
         "source_metrics": source_metrics,
         "legacy_metrics": legacy_metrics,
         "research_assumptions": assumptions,
+        "comparison_policy": comparison_policy,
         "formal_facts": formal_facts,
     }
     source = _identity(
@@ -242,9 +271,14 @@ def test_replication_report_publish_verify_and_rebuild_is_deterministic(
     model = workspace.contents[model_ref.sha256].decode("utf-8")
     html = workspace.contents[html_ref.sha256].decode("utf-8")
     assert outcome in model and outcome in html
-    for partition in ("source_metrics", "legacy_metrics", "research_assumptions"):
+    for partition in (
+        "source_metrics",
+        "legacy_metrics",
+        "research_assumptions",
+        "comparison_criteria",
+    ):
         assert partition in model and partition in html
-    assert ("formal.nautilus" in model) is (outcome != "not_reproducible")
+    assert bool(json.loads(model)["formal_facts"]) is (outcome != "not_reproducible")
     assert ("rule_mapping_incomplete" in html) is (outcome == "not_reproducible")
 
 
@@ -276,3 +310,55 @@ def test_render_study_cli_adds_replication_subject_without_changing_legacy_flag(
     assert replication.study_id is None
     assert legacy.study_id == "study-1"
     assert legacy.replication_source_id is None
+
+
+def test_replication_case_owner_identity_drift_fails_closed(
+    workspace: FakeWorkspace,
+) -> None:
+    source_id = add_replication_source(workspace, "exact")
+    case_id = workspace.records[source_id]["payload"]["case"]["record_id"]
+    workspace.records[case_id]["payload"]["replication_id"] = "0" * 64
+
+    with pytest.raises(ContractError, match="identity"):
+        ReportingApplication(workspace).render_report(
+            "replication-study", source_id, ReportOptions()
+        )
+
+
+@pytest.mark.parametrize("outcome", ("exact", "directional", "failed", "not_reproducible"))
+def test_render_study_cli_dispatches_each_closed_replication_outcome(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path,
+    outcome: str,
+) -> None:
+    source_id = canonical_sha256({"outcome": outcome})
+
+    class CliApplication:
+        def render_report(self, kind: str, subject: str, options: ReportOptions):
+            assert kind == "replication-study"
+            assert subject == source_id
+            assert options.workspace_root == tmp_path
+            return {"outcome": outcome, "source_id": subject}
+
+    monkeypatch.setattr(
+        "strategy_reporting.cli.application_for_workspace",
+        lambda _root: CliApplication(),
+    )
+
+    assert (
+        main(
+            [
+                "--workspace",
+                str(tmp_path),
+                "render-study",
+                "--replication-source-id",
+                source_id,
+            ]
+        )
+        == 0
+    )
+    assert json.loads(capsys.readouterr().out) == {
+        "ok": True,
+        "result": {"outcome": outcome, "source_id": source_id},
+    }

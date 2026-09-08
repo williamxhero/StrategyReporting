@@ -265,6 +265,7 @@ class ReplicationStudyReport(StrictModel):
     source_metrics: list[dict[str, Any]]
     legacy_metrics: list[dict[str, Any]]
     research_assumptions: list[dict[str, Any]]
+    comparison_criteria: list[dict[str, Any]] = Field(min_length=1)
     formal_facts: list[dict[str, Any]]
     differences: list[dict[str, Any]]
     blocking_prerequisites: list[dict[str, Any]]

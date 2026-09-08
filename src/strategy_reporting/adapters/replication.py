@@ -36,10 +36,18 @@ class ReplicationReadModelBuilder:
             evidence = self._read(source.comparison_evidence)
             decision = self._read(source.decision)
             case = self._read(source.case)
-            del case
+            verify_embedded_identity(
+                case["payload"], id_field="replication_id", reference=source.case
+            )
             differences, gaps = self._verify_owner_meaning(source, evidence, decision)
             refs = [source.case, source.comparison_evidence, source.decision]
             if source.formal_execution is not None:
+                formal = self._read(source.formal_execution)
+                verify_embedded_identity(
+                    formal["payload"],
+                    id_field="execution_id",
+                    reference=source.formal_execution,
+                )
                 refs.append(source.formal_execution)
             if source.research_design is not None:
                 design = self._read(source.research_design)
@@ -100,6 +108,10 @@ class ReplicationReadModelBuilder:
             legacy_metrics=[item.model_dump(mode="json") for item in source.legacy_metrics],
             research_assumptions=[
                 item.model_dump(mode="json", by_alias=True) for item in source.research_assumptions
+            ],
+            comparison_criteria=[
+                item.model_dump(mode="json")
+                for item in source.comparison_policy.criteria
             ],
             formal_facts=[item.model_dump(mode="json") for item in source.formal_facts],
             differences=[item.model_dump(mode="json") for item in read.differences],
@@ -182,6 +194,7 @@ class ReplicationReadModelBuilder:
             "source_metrics",
             "legacy_metrics",
             "research_assumptions",
+            "comparison_policy",
             "formal_facts",
         ):
             if evidence_payload.get(key) != source.model_dump(mode="json").get(key):

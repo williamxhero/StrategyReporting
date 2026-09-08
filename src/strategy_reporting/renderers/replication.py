@@ -31,6 +31,7 @@ class ReplicationStudyRenderer:
             ("source_metrics", model.source_metrics),
             ("legacy_metrics", model.legacy_metrics),
             ("research_assumptions", model.research_assumptions),
+            ("comparison_criteria", model.comparison_criteria),
             ("formal_facts", model.formal_facts),
             ("differences", model.differences),
             ("blocking_prerequisites", model.blocking_prerequisites),

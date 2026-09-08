@@ -41,6 +41,58 @@ class ReplicationAssumption(StrictModel):
         return self
 
 
+class ReplicationComparisonCriterion(StrictModel):
+    dimension: Literal[
+        "accounting",
+        "adjustment",
+        "costs",
+        "data",
+        "fills",
+        "metric_definition",
+        "model",
+        "orders",
+        "timing",
+        "universe",
+    ]
+    source_selector: str = Field(pattern=r"^(source|legacy)\.metrics\.[a-z0-9_.-]+$")
+    formal_selector: str = Field(pattern=r"^formal\.nautilus\.metrics\.[a-z0-9_.-]+$")
+    mode: Literal["exact", "directional"]
+    tolerance_micros: int = Field(ge=0)
+    direction: Literal["same_sign", "greater_or_equal", "less_or_equal"] | None
+
+    @model_validator(mode="after")
+    def verify_mode(self) -> ReplicationComparisonCriterion:
+        if (self.mode == "directional") != (self.direction is not None):
+            raise ValueError("replication comparison direction mismatch")
+        return self
+
+
+class ReplicationComparisonPolicy(StrictModel):
+    schema_id: Literal["apex-research.replication-comparison-policy.v1"] = Field(
+        alias="schema"
+    )
+    policy_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    policy_version: str = Field(min_length=1)
+    criteria: list[ReplicationComparisonCriterion] = Field(min_length=1)
+    empirical_methods: list[str]
+
+    @model_validator(mode="after")
+    def verify_identity(self) -> ReplicationComparisonPolicy:
+        keys = [
+            (item.source_selector, item.formal_selector) for item in self.criteria
+        ]
+        if keys != sorted(set(keys)):
+            raise ValueError("replication comparison criteria are not canonical")
+        if self.empirical_methods != sorted(set(self.empirical_methods)):
+            raise ValueError("replication empirical methods are not canonical")
+        if any(not item for item in self.empirical_methods):
+            raise ValueError("replication empirical methods must not be empty")
+        payload = self.model_dump(exclude={"policy_id"}, mode="json", by_alias=True)
+        if self.policy_id != canonical_sha256(payload):
+            raise ValueError("replication comparison policy identity mismatch")
+        return self
+
+
 class ReplicationFormalFact(StrictModel):
     selector: str = Field(pattern=r"^formal\.nautilus\.metrics\.[a-z0-9_.-]+$")
     value_micros: int
@@ -55,14 +107,16 @@ class ReplicationFormalFact(StrictModel):
 
 class ReplicationDifference(StrictModel):
     dimension: Literal[
+        "accounting",
+        "adjustment",
+        "costs",
+        "data",
+        "fills",
         "metric_definition",
-        "sample_window",
+        "model",
+        "orders",
+        "timing",
         "universe",
-        "data_semantics",
-        "execution_timing",
-        "transaction_costs",
-        "benchmark",
-        "implementation",
     ]
     source_selector: str = Field(pattern=r"^(source|legacy)\.metrics\.[a-z0-9_.-]+$")
     formal_selector: str = Field(pattern=r"^formal\.nautilus\.metrics\.[a-z0-9_.-]+$")
@@ -100,6 +154,7 @@ class ReplicationReportSource(StrictModel):
     source_metrics: list[ReplicationMetric]
     legacy_metrics: list[ReplicationMetric]
     research_assumptions: list[ReplicationAssumption]
+    comparison_policy: ReplicationComparisonPolicy
     formal_facts: list[ReplicationFormalFact]
 
     @model_validator(mode="after")
@@ -127,6 +182,14 @@ class ReplicationReportSource(StrictModel):
             raise ValueError("replication source metric partition mismatch")
         if any(item.partition != "legacy" for item in self.legacy_metrics):
             raise ValueError("replication legacy metric partition mismatch")
+        source_selectors = {
+            item.selector for item in (*self.source_metrics, *self.legacy_metrics)
+        }
+        if any(
+            item.source_selector not in source_selectors
+            for item in self.comparison_policy.criteria
+        ):
+            raise ValueError("replication comparison policy source selector is missing")
         payload = self.model_dump(exclude={"report_source_id"}, mode="json", by_alias=True)
         if self.report_source_id != canonical_sha256(payload):
             raise ValueError("replication report source identity mismatch")

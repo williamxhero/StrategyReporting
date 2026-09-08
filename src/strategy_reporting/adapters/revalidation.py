@@ -94,29 +94,41 @@ class RevalidationReadModelBuilder:
         qualification_record = self._matching_publication(
             related, _QUALIFICATION, "closure", reference.record_id
         )
+        replacement_evidence = closure_payload.get("replacement_evidence")
+        if replacement_evidence is None and evidence_publication_record is not None:
+            replacement_evidence = evidence_publication_record.payload.get("evidence")
         evidence_ids = {
             value
             for value in (
                 self._reference_id(closure_payload.get("supersedes_evidence")),
-                self._reference_id(closure_payload.get("replacement_evidence")),
+                self._reference_id(replacement_evidence),
             )
             if value is not None
         }
-        archive_record = next(
-            (
-                item
-                for item in related
-                if item.record_type == _ARCHIVE
-                and evidence_ids
-                & {
-                    self._reference_id(entry)
-                    for entry in self._list(
-                        item.payload.get("historical_entries"), "archive history"
-                    )
-                }
-            ),
-            None,
-        )
+        archive_candidates = [
+            item
+            for item in related
+            if item.record_type == _ARCHIVE
+            and evidence_ids
+            & {
+                self._reference_id(entry)
+                for entry in self._list(item.payload.get("historical_entries"), "archive history")
+            }
+        ]
+        superseded_archive_ids = {
+            value
+            for item in archive_candidates
+            if (value := self._reference_id(item.payload.get("supersedes"))) is not None
+        }
+        archive_tips = [
+            item for item in archive_candidates if item.record_id not in superseded_archive_ids
+        ]
+        if len(archive_tips) > 1:
+            raise ContractError(
+                "revalidation_archive_ambiguous",
+                "multiple current currency-aware archive views are not ordered",
+            )
+        archive_record = archive_tips[0] if archive_tips else None
         for item in (archive_record, evidence_publication_record, qualification_record):
             if item is not None:
                 publications[item.record_id] = item
@@ -172,7 +184,7 @@ class RevalidationReadModelBuilder:
             },
             supersession={
                 "supersedes_evidence": closure_payload["supersedes_evidence"],
-                "replacement_evidence": closure_payload["replacement_evidence"],
+                "replacement_evidence": replacement_evidence,
             },
             archive=archive,
             evidence_publication=evidence_publication,

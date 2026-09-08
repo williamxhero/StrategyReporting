@@ -109,6 +109,7 @@ def _fixture(workspace: FakeWorkspace, *, malicious: bool = False) -> str:
         "apex-research.evidence-archive-current.v1",
         {
             "schema": "apex-research.evidence-archive-current.v1",
+            "supersedes": None,
             "historical_entries": [
                 _ref(evidence_id, "apex-research.evidence.v2"),
                 _ref(replacement_id, "apex-research.evidence.v2"),

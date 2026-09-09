@@ -206,3 +206,42 @@ class CampaignReportSource(StrictModel):
         if self.source_id != canonical_sha256(self.identity_payload()):
             raise ValueError("campaign report source identity mismatch")
         return self
+
+
+class CampaignSubject(StrictModel):
+    campaign_id: str = Field(min_length=1)
+    source_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class CampaignObjective(StrictModel):
+    question: str = Field(min_length=1)
+    constraints: list[str]
+    assumptions: list[str]
+    source: dict[str, str]
+
+
+class CampaignReport(StrictModel):
+    schema_id: Literal["strategy-reporting.campaign-report.v1"] = Field(
+        default="strategy-reporting.campaign-report.v1", alias="schema"
+    )
+    title: str = Field(min_length=1)
+    subject: CampaignSubject
+    objective: CampaignObjective
+    sections: list[CampaignSourceSection]
+    current_evidence: dict[str, str] | None
+    current_qualification: dict[str, str] | None
+    source_publication: dict[str, str]
+    source_records: list[dict[str, str]]
+    workspace_run_ids: list[str]
+
+    @model_validator(mode="after")
+    def verify_shape(self) -> Self:
+        if tuple(section.name for section in self.sections) != CAMPAIGN_SECTION_ORDER:
+            raise ValueError("campaign report sections must preserve Apex order")
+        if self.source_publication != {
+            "record_id": self.subject.source_id,
+            "record_type": "apex-research.campaign-report-source.v1",
+            "source_id": self.subject.source_id,
+        }:
+            raise ValueError("campaign report source publication identity differs")
+        return self

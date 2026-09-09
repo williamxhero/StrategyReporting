@@ -6,7 +6,12 @@ from typing import Any
 from pydantic import ValidationError
 
 from strategy_reporting.adapters.workspace import WorkspaceAdapter
-from strategy_reporting.contracts.campaign_report import CampaignReportSource
+from strategy_reporting.contracts.campaign_report import (
+    CampaignObjective,
+    CampaignReport,
+    CampaignReportSource,
+    CampaignSubject,
+)
 from strategy_reporting.errors import ContractError, SourceError
 
 CAMPAIGN_SOURCE_TYPE = "apex-research.campaign-report-source.v1"
@@ -120,3 +125,41 @@ class CampaignReportSourceAdapter:
                     "campaign_source_owner_identity_mismatch",
                     "campaign source owner identity differs from Apex lineage",
                 )
+
+
+class CampaignReadModelBuilder:
+    """Map one verified Apex source to a frozen Reporting-owned read model."""
+
+    def __init__(self, workspace: WorkspaceAdapter) -> None:
+        self._source = CampaignReportSourceAdapter(workspace)
+
+    def build(self, campaign_id: str, *, source_id: str | None = None) -> CampaignReport:
+        source = self._source.read(campaign_id, source_id=source_id)
+        return CampaignReport(
+            title=source.campaign.title,
+            subject=CampaignSubject(campaign_id=campaign_id, source_id=source.source_id),
+            objective=CampaignObjective(
+                question=source.brief.question,
+                constraints=source.brief.constraints,
+                assumptions=source.brief.assumptions,
+                source=source.brief.source.model_dump(mode="json"),
+            ),
+            sections=source.sections,
+            current_evidence=(
+                source.current_evidence.model_dump(mode="json")
+                if source.current_evidence is not None
+                else None
+            ),
+            current_qualification=(
+                source.current_qualification.model_dump(mode="json")
+                if source.current_qualification is not None
+                else None
+            ),
+            source_publication={
+                "record_id": source.source_id,
+                "record_type": CAMPAIGN_SOURCE_TYPE,
+                "source_id": source.source_id,
+            },
+            source_records=[item.model_dump(mode="json") for item in source.sources],
+            workspace_run_ids=source.workspace_runs,
+        )

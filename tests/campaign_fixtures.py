@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from copy import deepcopy
 from typing import Any
 
@@ -141,3 +143,68 @@ def publish_campaign_source(
     }
     workspace.records[payload["source_id"]] = publication
     return publication
+
+
+def scenario_campaign_source(scenario: str) -> dict[str, Any]:
+    source = complete_campaign_source()
+    source["campaign"]["title"] = f"{scenario.title()} campaign"
+    sections = {item["name"]: item for item in source["sections"]}
+    if scenario == "complete":
+        for section in sections.values():
+            section["availability"] = {"status": "available", "reason": None}
+            if not section["items"]:
+                section["facts"] = {"status": "published"}
+    elif scenario == "partial":
+        pass
+    elif scenario == "blocked":
+        for section in sections.values():
+            section["availability"] = {"status": "blocked", "reason": "upstream blocked"}
+            section["items"] = []
+            section["facts"] = {}
+    elif scenario == "failed":
+        for section in sections.values():
+            section["availability"] = {
+                "status": "unavailable",
+                "reason": "campaign failed before publication",
+            }
+            section["items"] = []
+            section["facts"] = {}
+        sections["failures"] = {
+            "name": "failures",
+            "availability": {"status": "available", "reason": None},
+            "items": [],
+            "facts": {"status": "failed", "reason": "formal run failed"},
+        }
+    elif scenario == "retired":
+        sections["qualification"] = {
+            "name": "qualification",
+            "availability": {"status": "available", "reason": None},
+            "items": [],
+            "facts": {"maturity": "retired", "currency": "current"},
+        }
+    elif scenario == "diversity":
+        for name, record_type in (
+            ("exploration_archive", "apex-research.exploration-archive.v1"),
+            ("evidence_archive", "apex-research.evidence-archive.v1"),
+        ):
+            sections[name] = {
+                "name": name,
+                "availability": {"status": "available", "reason": None},
+                "items": [],
+                "facts": {"record_type": record_type, "active_entries": ["niche-a"]},
+            }
+    elif scenario == "auxiliary":
+        sections["auxiliary_evidence"] = {
+            "name": "auxiliary_evidence",
+            "availability": {"status": "available", "reason": None},
+            "items": [],
+            "facts": {"evidence_level": "auxiliary", "status": "corroborated"},
+        }
+    else:
+        raise ValueError(f"unknown scenario: {scenario}")
+    source["sections"] = [sections[name] for name in SECTION_NAMES]
+    body = {key: value for key, value in source.items() if key != "source_id"}
+    source["source_id"] = hashlib.sha256(
+        json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return source

@@ -10,6 +10,7 @@ from strategy_reporting.contracts.behavior_descriptors import (
     BehaviorDescriptorReadModel,
     BehaviorDescriptorRef,
 )
+from strategy_reporting.contracts.campaign_report import CampaignReport, CampaignReportSource
 from strategy_reporting.contracts.evolution import (
     EvolutionIslandRef,
     EvolutionProgressReadModel,
@@ -34,6 +35,8 @@ __all__ = [
     "BehaviorDescriptorReadModel",
     "BehaviorDescriptorReadModelBuilder",
     "BehaviorDescriptorRef",
+    "CampaignReport",
+    "CampaignReportSource",
     "EvidenceArchiveReadModel",
     "EvolutionIslandRef",
     "EvolutionProgressReadModel",

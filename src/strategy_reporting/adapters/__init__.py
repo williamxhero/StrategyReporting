@@ -1,6 +1,9 @@
 from strategy_reporting.adapters.apex_research import ApexResearchPublicationAdapter
 from strategy_reporting.adapters.behavior_descriptors import BehaviorDescriptorReadModelBuilder
-from strategy_reporting.adapters.campaign_source import CampaignReportSourceAdapter
+from strategy_reporting.adapters.campaign_source import (
+    CampaignReadModelBuilder,
+    CampaignReportSourceAdapter,
+)
 from strategy_reporting.adapters.evidence_v2 import EvidenceV2ReadModelBuilder
 from strategy_reporting.adapters.formal_run import WorkspaceFormalRunAdapter
 from strategy_reporting.adapters.quality_diversity_archives import (
@@ -13,6 +16,7 @@ from strategy_reporting.adapters.workspace import WorkspaceAdapter, WorkspaceCli
 __all__ = [
     "ApexResearchPublicationAdapter",
     "BehaviorDescriptorReadModelBuilder",
+    "CampaignReadModelBuilder",
     "CampaignReportSourceAdapter",
     "EvidenceV2ReadModelBuilder",
     "QualityDiversityArchiveReadModelBuilder",

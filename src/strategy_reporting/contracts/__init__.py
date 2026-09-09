@@ -46,6 +46,7 @@ from strategy_reporting.contracts.behavior_descriptors import (
 )
 from strategy_reporting.contracts.campaign_report import (
     CampaignAvailability,
+    CampaignReport,
     CampaignReportSource,
     CampaignSourceRef,
     CampaignSourceSection,
@@ -53,6 +54,7 @@ from strategy_reporting.contracts.campaign_report import (
 
 __all__ = [
     "CampaignAvailability",
+    "CampaignReport",
     "CampaignReportSource",
     "CampaignSourceRef",
     "CampaignSourceSection",

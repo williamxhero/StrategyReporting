@@ -44,3 +44,16 @@ from strategy_reporting.contracts.behavior_descriptors import (
     BehaviorDescriptorReadModel,
     BehaviorDescriptorRef,
 )
+from strategy_reporting.contracts.campaign_report import (
+    CampaignAvailability,
+    CampaignReportSource,
+    CampaignSourceRef,
+    CampaignSourceSection,
+)
+
+__all__ = [
+    "CampaignAvailability",
+    "CampaignReportSource",
+    "CampaignSourceRef",
+    "CampaignSourceSection",
+]

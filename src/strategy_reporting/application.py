@@ -6,6 +6,7 @@ from typing import Any
 
 from strategy_reporting.adapters import (
     ApexResearchPublicationAdapter,
+    CampaignReportSourceAdapter,
     ReplicationReadModelBuilder,
     WorkspaceAdapter,
     WorkspaceClientPort,
@@ -13,6 +14,7 @@ from strategy_reporting.adapters import (
 )
 from strategy_reporting.adapters.workspace import production_client
 from strategy_reporting.canonical import bytes_sha256
+from strategy_reporting.contracts.campaign_report import CampaignReportSource
 from strategy_reporting.errors import ContractError
 from strategy_reporting.models import (
     FormalRunReport,
@@ -32,6 +34,11 @@ class ReportingApplication:
         self.workspace = WorkspaceAdapter(client)
         self.publisher = WorkspaceReportPublisher(self.workspace)
         self.renderers = RendererRegistry()
+
+    def read_campaign_source(
+        self, campaign_id: str, *, source_id: str | None = None
+    ) -> CampaignReportSource:
+        return CampaignReportSourceAdapter(self.workspace).read(campaign_id, source_id=source_id)
 
     def render_report(
         self, subject_kind: ReportKind, subject_id: str, options: ReportOptions

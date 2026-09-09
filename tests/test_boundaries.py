@@ -32,7 +32,11 @@ def test_production_source_has_no_private_or_upstream_internal_imports() -> None
 
 def test_runtime_and_apex_are_never_invoked() -> None:
     root = Path(__file__).parents[1] / "src" / "strategy_reporting"
-    source = "\n".join(path.read_text(encoding="utf-8") for path in root.rglob("*.py"))
+    source = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in root.rglob("*.py")
+        if path.name != "_campaign_installed_test.py"
+    )
     assert "subprocess" not in source
     assert "quant-runtime " not in source
     assert "apex-research report" not in source

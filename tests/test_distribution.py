@@ -40,6 +40,8 @@ def test_public_surface_is_deep_and_small() -> None:
         "BehaviorDescriptorReadModel",
         "BehaviorDescriptorReadModelBuilder",
         "BehaviorDescriptorRef",
+        "CampaignReport",
+        "CampaignReportSource",
         "EvidenceArchiveReadModel",
         "EvolutionIslandRef",
         "EvolutionProgressReadModel",

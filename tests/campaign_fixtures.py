@@ -156,9 +156,11 @@ def scenario_campaign_source(scenario: str) -> dict[str, Any]:
                 section["facts"] = {"status": "published"}
     elif scenario == "partial":
         pass
-    elif scenario == "blocked":
+    elif scenario in {"blocked", "unavailable"}:
+        status = scenario
+        reason = "upstream blocked" if scenario == "blocked" else "owner source unavailable"
         for section in sections.values():
-            section["availability"] = {"status": "blocked", "reason": "upstream blocked"}
+            section["availability"] = {"status": status, "reason": reason}
             section["items"] = []
             section["facts"] = {}
     elif scenario == "failed":

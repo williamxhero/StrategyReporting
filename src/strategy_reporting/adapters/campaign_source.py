@@ -15,6 +15,7 @@ from strategy_reporting.contracts.campaign_report import (
     CampaignQuantitativeValue,
     CampaignReport,
     CampaignReportSource,
+    CampaignReportState,
     CampaignSubject,
 )
 from strategy_reporting.errors import ContractError, SourceError
@@ -143,6 +144,7 @@ class CampaignReadModelBuilder:
         return CampaignReport(
             title=source.campaign.title,
             subject=CampaignSubject(campaign_id=campaign_id, source_id=source.source_id),
+            report_state=_report_state(source),
             objective=CampaignObjective(
                 question=source.brief.question,
                 constraints=source.brief.constraints,
@@ -169,6 +171,26 @@ class CampaignReadModelBuilder:
             source_records=[item.model_dump(mode="json") for item in source.sources],
             workspace_run_ids=source.workspace_runs,
         )
+
+
+def _report_state(source: CampaignReportSource) -> CampaignReportState:
+    statuses = [section.availability.status for section in source.sections]
+    if "blocked" in statuses:
+        return "blocked"
+    if all(status == "available" for status in statuses):
+        return "complete"
+    if all(status == "unavailable" for status in statuses):
+        return "unavailable"
+    available = {
+        section.name for section in source.sections if section.availability.status == "available"
+    }
+    if (
+        available
+        and available <= {"hypotheses", "candidates", "iterations"}
+        and all(status in {"available", "not_evaluated"} for status in statuses)
+    ):
+        return "design"
+    return "partial"
 
 
 def _evidence_lanes(source: CampaignReportSource) -> list[CampaignEvidenceLane]:

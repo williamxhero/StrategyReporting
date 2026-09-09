@@ -25,6 +25,7 @@ CampaignSectionName = Literal[
     "limitations",
 ]
 CampaignEvidenceClass = Literal["formal", "discovery", "empirical", "benchmark", "auxiliary"]
+CampaignReportState = Literal["complete", "design", "partial", "blocked", "unavailable"]
 CAMPAIGN_EVIDENCE_ORDER: tuple[CampaignEvidenceClass, ...] = (
     "formal",
     "discovery",
@@ -258,6 +259,7 @@ class CampaignReport(StrictModel):
     )
     title: str = Field(min_length=1)
     subject: CampaignSubject
+    report_state: CampaignReportState
     objective: CampaignObjective
     sections: list[CampaignSourceSection]
     evidence_lanes: list[CampaignEvidenceLane]

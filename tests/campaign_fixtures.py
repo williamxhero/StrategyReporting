@@ -208,3 +208,84 @@ def scenario_campaign_source(scenario: str) -> dict[str, Any]:
         json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     return source
+
+
+def evidence_lane_campaign_source() -> dict[str, Any]:
+    source = complete_campaign_source()
+    sections = {item["name"]: item for item in source["sections"]}
+    references = {
+        "formal": {
+            "record_id": "run-formal-1",
+            "record_type": "quant-research.run-record.v1",
+        },
+        "empirical": {
+            "record_id": "d" * 64,
+            "record_type": "apex-research.empirical-result.v1",
+        },
+        "benchmark": {
+            "record_id": "e" * 64,
+            "record_type": "apex-research.benchmark-result.v1",
+        },
+        "auxiliary": {
+            "record_id": "f" * 64,
+            "record_type": "apex-research.auxiliary-validation.v1",
+        },
+    }
+    sections["packages_and_runs"] = {
+        "name": "packages_and_runs",
+        "availability": {"status": "available", "reason": None},
+        "items": [
+            {
+                "source": references["formal"],
+                "ordinal": 1,
+                "summary": {
+                    "evidence_level": "formal",
+                    "selector": "formal.nautilus.metrics.sharpe",
+                    "observed": 1.25,
+                },
+            }
+        ],
+        "facts": {},
+    }
+    sections["exploration_archive"] = {
+        "name": "exploration_archive",
+        "availability": {"status": "available", "reason": None},
+        "items": [],
+        "facts": {"evidence_level": "discovery", "entry_count": 9},
+    }
+    sections["auxiliary_evidence"] = {
+        "name": "auxiliary_evidence",
+        "availability": {"status": "available", "reason": None},
+        "items": [
+            {
+                "source": references[level],
+                "ordinal": ordinal,
+                "summary": {
+                    "evidence_level": level,
+                    "selector": f"{level}.metrics.score",
+                    "observed": observed,
+                },
+            }
+            for ordinal, (level, observed) in enumerate(
+                (("empirical", 0.71), ("benchmark", 0.63), ("auxiliary", 0.55)), start=1
+            )
+        ],
+        "facts": {},
+    }
+    sections["qualification"] = {
+        "name": "qualification",
+        "availability": {"status": "available", "reason": None},
+        "items": [],
+        "facts": {"qualification_maturity": "research_validated"},
+    }
+    source["sections"] = [sections[name] for name in SECTION_NAMES]
+    source["sources"] = sorted(
+        [*source["sources"], *references.values()],
+        key=lambda item: (item["record_type"], item["record_id"]),
+    )
+    source["workspace_runs"] = ["run-formal-1"]
+    body = {key: value for key, value in source.items() if key != "source_id"}
+    source["source_id"] = hashlib.sha256(
+        json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return source

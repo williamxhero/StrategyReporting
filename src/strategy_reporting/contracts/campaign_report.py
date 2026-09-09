@@ -24,6 +24,14 @@ CampaignSectionName = Literal[
     "auxiliary_evidence",
     "limitations",
 ]
+CampaignEvidenceClass = Literal["formal", "discovery", "empirical", "benchmark", "auxiliary"]
+CAMPAIGN_EVIDENCE_ORDER: tuple[CampaignEvidenceClass, ...] = (
+    "formal",
+    "discovery",
+    "empirical",
+    "benchmark",
+    "auxiliary",
+)
 
 CAMPAIGN_SECTION_ORDER: tuple[CampaignSectionName, ...] = (
     "hypotheses",
@@ -220,6 +228,30 @@ class CampaignObjective(StrictModel):
     source: dict[str, str]
 
 
+class CampaignQuantitativeValue(StrictModel):
+    path: str = Field(min_length=1)
+    value: int | float
+    source: dict[str, str]
+
+    @model_validator(mode="after")
+    def reject_boolean(self) -> Self:
+        if isinstance(self.value, bool):
+            raise ValueError("campaign quantitative values cannot be boolean")
+        return self
+
+
+class CampaignEvidenceEntry(StrictModel):
+    section: CampaignSectionName
+    source: dict[str, str]
+    data: dict[str, Any]
+    quantitative_values: list[CampaignQuantitativeValue]
+
+
+class CampaignEvidenceLane(StrictModel):
+    evidence_class: CampaignEvidenceClass
+    entries: list[CampaignEvidenceEntry]
+
+
 class CampaignReport(StrictModel):
     schema_id: Literal["strategy-reporting.campaign-report.v1"] = Field(
         default="strategy-reporting.campaign-report.v1", alias="schema"
@@ -228,6 +260,7 @@ class CampaignReport(StrictModel):
     subject: CampaignSubject
     objective: CampaignObjective
     sections: list[CampaignSourceSection]
+    evidence_lanes: list[CampaignEvidenceLane]
     current_evidence: dict[str, str] | None
     current_qualification: dict[str, str] | None
     source_publication: dict[str, str]
@@ -238,6 +271,8 @@ class CampaignReport(StrictModel):
     def verify_shape(self) -> Self:
         if tuple(section.name for section in self.sections) != CAMPAIGN_SECTION_ORDER:
             raise ValueError("campaign report sections must preserve Apex order")
+        if tuple(lane.evidence_class for lane in self.evidence_lanes) != CAMPAIGN_EVIDENCE_ORDER:
+            raise ValueError("campaign evidence lanes must be complete, unique and canonical")
         if self.source_publication != {
             "record_id": self.subject.source_id,
             "record_type": "apex-research.campaign-report-source.v1",

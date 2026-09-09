@@ -7,7 +7,12 @@ from pydantic import ValidationError
 
 from strategy_reporting.adapters.workspace import WorkspaceAdapter
 from strategy_reporting.contracts.campaign_report import (
+    CAMPAIGN_EVIDENCE_ORDER,
+    CampaignEvidenceClass,
+    CampaignEvidenceEntry,
+    CampaignEvidenceLane,
     CampaignObjective,
+    CampaignQuantitativeValue,
     CampaignReport,
     CampaignReportSource,
     CampaignSubject,
@@ -145,6 +150,7 @@ class CampaignReadModelBuilder:
                 source=source.brief.source.model_dump(mode="json"),
             ),
             sections=source.sections,
+            evidence_lanes=_evidence_lanes(source),
             current_evidence=(
                 source.current_evidence.model_dump(mode="json")
                 if source.current_evidence is not None
@@ -163,3 +169,89 @@ class CampaignReadModelBuilder:
             source_records=[item.model_dump(mode="json") for item in source.sources],
             workspace_run_ids=source.workspace_runs,
         )
+
+
+def _evidence_lanes(source: CampaignReportSource) -> list[CampaignEvidenceLane]:
+    grouped: dict[CampaignEvidenceClass, list[CampaignEvidenceEntry]] = {
+        name: [] for name in CAMPAIGN_EVIDENCE_ORDER
+    }
+    source_publication = {
+        "record_id": source.source_id,
+        "record_type": CAMPAIGN_SOURCE_TYPE,
+    }
+    for section in source.sections:
+        facts_level = _evidence_class(section.facts.get("evidence_level"))
+        if facts_level is not None:
+            grouped[facts_level].append(
+                _evidence_entry(section.name, source_publication, section.facts, facts_level)
+            )
+        for item in section.items:
+            item_level = _evidence_class(item.summary.get("evidence_level"))
+            if item_level is not None:
+                grouped[item_level].append(
+                    _evidence_entry(
+                        section.name,
+                        item.source.model_dump(mode="json"),
+                        item.summary,
+                        item_level,
+                    )
+                )
+    return [
+        CampaignEvidenceLane(evidence_class=name, entries=grouped[name])
+        for name in CAMPAIGN_EVIDENCE_ORDER
+    ]
+
+
+def _evidence_class(value: object) -> CampaignEvidenceClass | None:
+    if value in CAMPAIGN_EVIDENCE_ORDER:
+        return value
+    return None
+
+
+def _evidence_entry(
+    section: Any,
+    source: dict[str, str],
+    data: dict[str, Any],
+    evidence_class: CampaignEvidenceClass,
+) -> CampaignEvidenceEntry:
+    selector = data.get("selector")
+    if (
+        evidence_class == "formal"
+        and isinstance(selector, str)
+        and not selector.startswith("formal.nautilus.")
+    ):
+        raise ContractError(
+            "campaign_formal_selector_invalid",
+            "formal campaign evidence must retain a Nautilus selector",
+        )
+    if evidence_class != "formal" and isinstance(selector, str) and selector.startswith("formal."):
+        raise ContractError(
+            "campaign_evidence_lane_contamination",
+            "non-formal campaign evidence cannot use a formal selector",
+        )
+    return CampaignEvidenceEntry(
+        section=section,
+        source=source,
+        data=data,
+        quantitative_values=_quantitative_values(data, source=source),
+    )
+
+
+def _quantitative_values(
+    value: object, *, source: dict[str, str], path: str = "$"
+) -> list[CampaignQuantitativeValue]:
+    if isinstance(value, bool) or value is None or isinstance(value, str):
+        return []
+    if isinstance(value, int | float):
+        return [CampaignQuantitativeValue(path=path, value=value, source=source)]
+    if isinstance(value, dict):
+        result: list[CampaignQuantitativeValue] = []
+        for key in sorted(value):
+            result.extend(_quantitative_values(value[key], source=source, path=f"{path}.{key}"))
+        return result
+    if isinstance(value, list):
+        result = []
+        for index, item in enumerate(value):
+            result.extend(_quantitative_values(item, source=source, path=f"{path}[{index}]"))
+        return result
+    return []

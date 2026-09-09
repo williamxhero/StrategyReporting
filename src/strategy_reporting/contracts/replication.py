@@ -68,9 +68,7 @@ class ReplicationComparisonCriterion(StrictModel):
 
 
 class ReplicationComparisonPolicy(StrictModel):
-    schema_id: Literal["apex-research.replication-comparison-policy.v1"] = Field(
-        alias="schema"
-    )
+    schema_id: Literal["apex-research.replication-comparison-policy.v1"] = Field(alias="schema")
     policy_id: str = Field(pattern=r"^[0-9a-f]{64}$")
     policy_version: str = Field(min_length=1)
     criteria: list[ReplicationComparisonCriterion] = Field(min_length=1)
@@ -78,9 +76,7 @@ class ReplicationComparisonPolicy(StrictModel):
 
     @model_validator(mode="after")
     def verify_identity(self) -> ReplicationComparisonPolicy:
-        keys = [
-            (item.source_selector, item.formal_selector) for item in self.criteria
-        ]
+        keys = [(item.source_selector, item.formal_selector) for item in self.criteria]
         if keys != sorted(set(keys)):
             raise ValueError("replication comparison criteria are not canonical")
         if self.empirical_methods != sorted(set(self.empirical_methods)):
@@ -182,12 +178,9 @@ class ReplicationReportSource(StrictModel):
             raise ValueError("replication source metric partition mismatch")
         if any(item.partition != "legacy" for item in self.legacy_metrics):
             raise ValueError("replication legacy metric partition mismatch")
-        source_selectors = {
-            item.selector for item in (*self.source_metrics, *self.legacy_metrics)
-        }
+        source_selectors = {item.selector for item in (*self.source_metrics, *self.legacy_metrics)}
         if any(
-            item.source_selector not in source_selectors
-            for item in self.comparison_policy.criteria
+            item.source_selector not in source_selectors for item in self.comparison_policy.criteria
         ):
             raise ValueError("replication comparison policy source selector is missing")
         payload = self.model_dump(exclude={"report_source_id"}, mode="json", by_alias=True)

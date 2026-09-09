@@ -110,8 +110,7 @@ class ReplicationReadModelBuilder:
                 item.model_dump(mode="json", by_alias=True) for item in source.research_assumptions
             ],
             comparison_criteria=[
-                item.model_dump(mode="json")
-                for item in source.comparison_policy.criteria
+                item.model_dump(mode="json") for item in source.comparison_policy.criteria
             ],
             formal_facts=[item.model_dump(mode="json") for item in source.formal_facts],
             differences=[item.model_dump(mode="json") for item in read.differences],

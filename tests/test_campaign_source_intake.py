@@ -47,6 +47,16 @@ def test_application_reads_one_strict_verified_campaign_source_without_graph_tra
             "local path",
         ),
         (
+            lambda value: value["brief"].update(
+                {"question": r"\\private-host\campaigns\source.json"}
+            ),
+            "local path",
+        ),
+        (
+            lambda value: value["brief"].update({"question": "/var/lib/private/campaign.json"}),
+            "local path",
+        ),
+        (
             lambda value: value["sections"][0]["items"][0].update({"ordinal": 2}),
             "ordinal",
         ),

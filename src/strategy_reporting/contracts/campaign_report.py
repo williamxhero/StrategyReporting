@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Any, Literal, Self
 
 from pydantic import Field, model_validator
@@ -75,10 +76,9 @@ def reject_unsafe_campaign_value(value: object, *, location: str = "source") -> 
             reject_unsafe_campaign_value(item, location=f"{location}[{index}]")
     elif isinstance(value, str) and (
         _WINDOWS_ABSOLUTE_PATH.match(value)
+        or PureWindowsPath(value).is_absolute()
+        or PurePosixPath(value).is_absolute()
         or value.startswith("file://")
-        or value.startswith("/home/")
-        or value.startswith("/root/")
-        or value.startswith("/tmp/")
     ):
         raise ValueError(f"forbidden local path in campaign source: {location}")
 
@@ -241,6 +241,52 @@ class CampaignQuantitativeValue(StrictModel):
         return self
 
 
+def campaign_quantitative_values(
+    sections: list[CampaignSourceSection], source_publication: dict[str, str]
+) -> list[CampaignQuantitativeValue]:
+    publication = {
+        "record_id": source_publication["record_id"],
+        "record_type": source_publication["record_type"],
+    }
+    values: list[CampaignQuantitativeValue] = []
+    for section in sections:
+        prefix = f"$.sections.{section.name}"
+        for index, item in enumerate(section.items):
+            values.extend(
+                _quantitative_values(
+                    item.summary,
+                    source=item.source.model_dump(mode="json"),
+                    path=f"{prefix}.items[{index}].summary",
+                )
+            )
+        values.extend(
+            _quantitative_values(section.facts, source=publication, path=f"{prefix}.facts")
+        )
+    return values
+
+
+def _quantitative_values(
+    value: object, *, source: dict[str, str], path: str
+) -> list[CampaignQuantitativeValue]:
+    if isinstance(value, bool) or value is None or isinstance(value, str):
+        return []
+    if isinstance(value, int | float):
+        return [CampaignQuantitativeValue(path=path, value=value, source=source)]
+    if isinstance(value, dict):
+        return [
+            quantity
+            for key in sorted(value)
+            for quantity in _quantitative_values(value[key], source=source, path=f"{path}.{key}")
+        ]
+    if isinstance(value, list):
+        return [
+            quantity
+            for index, item in enumerate(value)
+            for quantity in _quantitative_values(item, source=source, path=f"{path}[{index}]")
+        ]
+    return []
+
+
 class CampaignEvidenceEntry(StrictModel):
     section: CampaignSectionName
     source: dict[str, str]
@@ -263,6 +309,7 @@ class CampaignReport(StrictModel):
     objective: CampaignObjective
     sections: list[CampaignSourceSection]
     evidence_lanes: list[CampaignEvidenceLane]
+    quantitative_values: list[CampaignQuantitativeValue]
     current_evidence: dict[str, str] | None
     current_qualification: dict[str, str] | None
     source_publication: dict[str, str]
@@ -281,4 +328,8 @@ class CampaignReport(StrictModel):
             "source_id": self.subject.source_id,
         }:
             raise ValueError("campaign report source publication identity differs")
+        if self.quantitative_values != campaign_quantitative_values(
+            self.sections, self.source_publication
+        ):
+            raise ValueError("campaign quantitative value map must be complete and canonical")
         return self

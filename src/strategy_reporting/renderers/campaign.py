@@ -15,7 +15,7 @@ from strategy_reporting.renderers.interface import RenderedArtifact, RenderedBun
 
 
 class CampaignRenderer:
-    renderer_version = "campaign-html.v1+cards.1+csp.1"
+    renderer_version = "campaign-html.v1+cards.2+csp.1"
 
     def render(self, model: ReportModel | CampaignReport, options: ReportOptions) -> RenderedBundle:
         if not isinstance(model, CampaignReport):
@@ -55,7 +55,13 @@ class CampaignRenderer:
 def _document(model: CampaignReport, limit: int, css: str) -> str:
     objective = model.objective
     lanes = "".join(_lane(item.model_dump(mode="json"), limit) for item in model.evidence_lanes)
-    sections = "".join(_section(item.model_dump(mode="json"), limit) for item in model.sections)
+    fact_source = {
+        "record_id": model.source_publication["record_id"],
+        "record_type": model.source_publication["record_type"],
+    }
+    sections = "".join(
+        _section(item.model_dump(mode="json"), limit, fact_source) for item in model.sections
+    )
     constraints = "".join(f"<li>{html.escape(item)}</li>" for item in objective.constraints)
     assumptions = "".join(f"<li>{html.escape(item)}</li>" for item in objective.assumptions)
     return (
@@ -100,9 +106,10 @@ def _entry(raw: object) -> str:
     )
 
 
-def _section(raw: dict[str, object], limit: int) -> str:
+def _section(raw: dict[str, object], limit: int, fact_source: dict[str, str]) -> str:
     availability = _object(raw["availability"])
     items = _list_of_objects(raw["items"])
+    facts = _object(raw["facts"])
     visible = items[:limit]
     omitted = len(items) - len(visible)
     rows = "".join(
@@ -116,12 +123,19 @@ def _section(raw: dict[str, object], limit: int) -> str:
         )
         for item in visible
     )
+    facts_source = (
+        '<div class="source">section facts · '
+        f"{html.escape(fact_source['record_type'])} · "
+        f"{html.escape(fact_source['record_id'])}</div>"
+        if facts
+        else ""
+    )
     return (
         f'<section class="section" data-section="{html.escape(str(raw["name"]))}">'
         f"<h3>{html.escape(str(raw['name']))}</h3>"
         f'<div class="availability">{html.escape(str(availability["status"]))}</div>'
         f'<p class="reason">{html.escape(str(availability.get("reason") or ""))}</p>'
-        f"{rows}<pre>{_json(raw['facts'])}</pre>"
+        f"{rows}{facts_source}<pre>{_json(facts)}</pre>"
         f'<p class="omitted" data-omitted="{omitted}">{omitted} omitted</p></section>'
     )
 

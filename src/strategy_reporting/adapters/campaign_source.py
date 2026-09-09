@@ -17,6 +17,7 @@ from strategy_reporting.contracts.campaign_report import (
     CampaignReportSource,
     CampaignReportState,
     CampaignSubject,
+    campaign_quantitative_values,
 )
 from strategy_reporting.errors import ContractError, SourceError
 
@@ -153,6 +154,10 @@ class CampaignReadModelBuilder:
             ),
             sections=source.sections,
             evidence_lanes=_evidence_lanes(source),
+            quantitative_values=campaign_quantitative_values(
+                source.sections,
+                {"record_id": source.source_id, "record_type": CAMPAIGN_SOURCE_TYPE},
+            ),
             current_evidence=(
                 source.current_evidence.model_dump(mode="json")
                 if source.current_evidence is not None

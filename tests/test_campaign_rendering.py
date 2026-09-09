@@ -51,6 +51,10 @@ def test_campaign_renderer_is_deterministic_escaped_self_contained_and_bounded(
     assert "Content-Security-Policy" in html
     assert "http://" not in html and "https://" not in html
     assert 'data-omitted="2"' in html
+    assert (
+        f"section facts · apex-research.campaign-report-source.v1 · {model['subject']['source_id']}"
+        in html
+    )
     for evidence_class in ("formal", "discovery", "empirical", "benchmark", "auxiliary"):
         assert f'data-evidence-class="{evidence_class}"' in html
 

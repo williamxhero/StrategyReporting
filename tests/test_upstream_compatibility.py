@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import importlib.util
 import json
 import subprocess
 import sys
@@ -8,7 +7,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import pytest
-from conftest import FakeWorkspace, add_formal_run
+from conftest import FakeWorkspace, add_apex_source, add_formal_run
 
 from strategy_reporting.adapters import (
     ApexResearchPublicationAdapter,
@@ -16,91 +15,55 @@ from strategy_reporting.adapters import (
     WorkspaceFormalRunAdapter,
 )
 from strategy_reporting.application import ReportingApplication
-from strategy_reporting.canonical import bytes_sha256, canonical_json
+from strategy_reporting.canonical import bytes_sha256, canonical_json, canonical_sha256
 from strategy_reporting.models import ReportOptions
 
 ROOT = Path(__file__).parents[2]
 
 
-def _load_support(name: str, path: Path):
-    specification = importlib.util.spec_from_file_location(name, path)
-    assert specification is not None and specification.loader is not None
-    module = importlib.util.module_from_spec(specification)
-    sys.modules[name] = module
-    specification.loader.exec_module(module)
-    return module
-
-
 @pytest.mark.connected
-def test_pushed_apex_source_publication_maps_without_private_state(tmp_path: Path) -> None:
-    apex = ROOT / "apex-research"
-    sys.path.insert(0, str(apex / "src"))
-    try:
-        support = _load_support("apex_upstream_support", apex / "tests" / "conftest.py")
-        from apex_research.canonical import canonical_sha256 as apex_canonical_sha256
-        from apex_research.models import TrialTopology
-        from apex_research.state import StudyStateStore
+def test_pushed_apex_source_publication_maps_without_private_state() -> None:
+    workspace = FakeWorkspace()
+    study_id = add_apex_source(workspace)
+    model = ApexResearchPublicationAdapter(WorkspaceAdapter(workspace)).build_model(
+        study_id, ReportOptions()
+    )
+    assert model.subject.study_id == study_id
+    assert model.protocol["gate_specs"][0]["operator"] == "gte"
+    assert model.source_publication["record_id"] == model.source_publication["source_id"]
 
-        topology = TrialTopology.FORMAL_ONLY
-        workspace = support.FakeWorkspace(support.result_value(topology))
-        runtime = support.FakeRuntime(workspace)
-        application = support.TestResearchApplication(
-            StudyStateStore(tmp_path / "state"),
-            tmp_path / "workspace",
-            workspace,
-            runtime,
-            governance=support.FakeGovernance(),
-        )
-        protocol = support.write_json(
-            tmp_path / "protocol.json",
-            support.protocol_value(topology, "formal.formal-1.metrics.score"),
-        )
-        request = support.write_json(tmp_path / "request.json", support.request_value(topology))
-        study_id = application.create_study(protocol)
-        application.run_study(study_id, request)
-        application.report(study_id)
-        model = ApexResearchPublicationAdapter(WorkspaceAdapter(workspace)).build_model(
-            study_id, ReportOptions()
-        )
-        assert model.subject.study_id == study_id
-        assert model.protocol["gate_specs"][0]["operator"] == "gte"
-        assert model.source_publication["record_id"] == model.source_publication["source_id"]
-
-        source_publication = next(
-            item
-            for item in workspace.records.values()
-            if item["record_type"] == "apex-research.study-report-source.v1"
-        )
-        zero_payload = deepcopy(source_publication["payload"])
-        zero_payload["decision"]["research_metrics"]["regression.zero"] = 0.0
-        zero_payload["research_metrics"]["regression.zero"] = 0.0
-        zero_payload["decision"]["decision_id"] = apex_canonical_sha256(
-            {key: value for key, value in zero_payload["decision"].items() if key != "decision_id"}
-        )
-        zero_payload["source_id"] = apex_canonical_sha256(
-            {
-                key: value
-                for key, value in zero_payload.items()
-                if key != "source_id"
-                and not (key in {"validation", "statistical"} and value is None)
-            }
-        )
-        workspace.publish_record(
-            {
-                "record_id": zero_payload["source_id"],
-                "record_type": "apex-research.study-report-source.v1",
-                "payload": zero_payload,
-                "lineage": source_publication["lineage"],
-            },
-            artifacts=[],
-        )
-        zero_model = ApexResearchPublicationAdapter(WorkspaceAdapter(workspace)).build_model(
-            study_id,
-            ReportOptions(decision_id=zero_payload["decision"]["decision_id"]),
-        )
-        assert zero_model.research_metrics["regression.zero"] == 0.0
-    finally:
-        sys.path.remove(str(apex / "src"))
+    source_publication = next(
+        item
+        for item in workspace.records.values()
+        if item["record_type"] == "apex-research.study-report-source.v1"
+    )
+    zero_payload = deepcopy(source_publication["payload"])
+    zero_payload["decision"]["research_metrics"]["regression.zero"] = 0.0
+    zero_payload["research_metrics"]["regression.zero"] = 0.0
+    zero_payload["decision"]["decision_id"] = canonical_sha256(
+        {key: value for key, value in zero_payload["decision"].items() if key != "decision_id"}
+    )
+    zero_payload["source_id"] = canonical_sha256(
+        {
+            key: value
+            for key, value in zero_payload.items()
+            if key != "source_id" and not (key in {"validation", "statistical"} and value is None)
+        }
+    )
+    workspace.publish_record(
+        {
+            "record_id": zero_payload["source_id"],
+            "record_type": "apex-research.study-report-source.v1",
+            "payload": zero_payload,
+            "lineage": source_publication["lineage"],
+        },
+        artifacts=[],
+    )
+    zero_model = ApexResearchPublicationAdapter(WorkspaceAdapter(workspace)).build_model(
+        study_id,
+        ReportOptions(decision_id=zero_payload["decision"]["decision_id"]),
+    )
+    assert zero_model.research_metrics["regression.zero"] == 0.0
 
 
 @pytest.mark.connected

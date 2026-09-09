@@ -5,6 +5,7 @@ from typing import Any
 from markupsafe import Markup
 
 from strategy_reporting.canonical import canonical_json
+from strategy_reporting.contracts.campaign_report import CampaignReport
 from strategy_reporting.errors import RenderError
 from strategy_reporting.html.assets import research_stylesheet
 from strategy_reporting.html.security import stylesheet_csp, validate_html
@@ -32,7 +33,7 @@ _OPERATOR_LABELS = {
 class ResearchStudyRenderer:
     renderer_version = "research-html.v1+template.3.3+csp.1"
 
-    def render(self, model: ReportModel, options: ReportOptions) -> RenderedBundle:
+    def render(self, model: ReportModel | CampaignReport, options: ReportOptions) -> RenderedBundle:
         if not isinstance(model, ResearchStudyReport):
             raise RenderError(
                 "renderer_model_mismatch", "research renderer requires ResearchStudyReport"

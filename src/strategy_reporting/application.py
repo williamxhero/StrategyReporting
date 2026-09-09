@@ -49,13 +49,17 @@ class ReportingApplication:
     def render_report(
         self, subject_kind: ReportKind, subject_id: str, options: ReportOptions
     ) -> ReportPublication:
-        model: ReportModel
+        model: ReportModel | CampaignReport
         if subject_kind == "formal-run":
             model = WorkspaceFormalRunAdapter(self.workspace).build_model(subject_id, options)
         elif subject_kind == "research-study":
             model = ApexResearchPublicationAdapter(self.workspace).build_model(subject_id, options)
         elif subject_kind == "replication-study":
             model = ReplicationReadModelBuilder(self.workspace).build_model(subject_id, options)
+        elif subject_kind == "campaign":
+            model = CampaignReadModelBuilder(self.workspace).build(
+                subject_id, source_id=options.campaign_source_id
+            )
         else:
             raise ContractError("report_kind_invalid", f"unsupported report kind: {subject_kind}")
         bundle = self.renderers.resolve(model).render(model, options)
@@ -100,7 +104,7 @@ class ReportingApplication:
         }
 
     @staticmethod
-    def _parse_model(content: bytes) -> ReportModel:
+    def _parse_model(content: bytes) -> ReportModel | CampaignReport:
         try:
             raw = json.loads(content)
             if not isinstance(raw, dict):
@@ -112,6 +116,8 @@ class ReportingApplication:
                 return ResearchStudyReport.model_validate_json(content, strict=True)
             if schema == "strategy-reporting.replication-study-report.v1":
                 return ReplicationStudyReport.model_validate_json(content, strict=True)
+            if schema == "strategy-reporting.campaign-report.v1":
+                return CampaignReport.model_validate_json(content, strict=True)
             raise ValueError(f"unsupported report model schema: {schema}")
         except (json.JSONDecodeError, ValueError) as exc:
             raise ContractError("report_model_invalid", str(exc)) from exc

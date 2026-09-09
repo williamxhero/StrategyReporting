@@ -10,6 +10,7 @@ from jinja2 import Environment, StrictUndefined, select_autoescape
 from markupsafe import Markup
 
 from strategy_reporting.canonical import canonical_json
+from strategy_reporting.contracts.campaign_report import CampaignReport
 from strategy_reporting.errors import RenderError
 from strategy_reporting.html.assets import stylesheet
 from strategy_reporting.html.security import stylesheet_csp, validate_html
@@ -82,7 +83,7 @@ class FormalRunRenderer:
     def __init__(self) -> None:
         self.native = NativeTearsheetRenderer()
 
-    def render(self, model: ReportModel, options: ReportOptions) -> RenderedBundle:
+    def render(self, model: ReportModel | CampaignReport, options: ReportOptions) -> RenderedBundle:
         if not isinstance(model, FormalRunReport):
             raise RenderError("renderer_model_mismatch", "formal renderer requires FormalRunReport")
         model_bytes = canonical_json(model.model_dump(mode="json"))

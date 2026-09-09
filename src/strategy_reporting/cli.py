@@ -58,6 +58,11 @@ def parser() -> StrictParser:
     render_study.add_argument("--decision-id")
     _render_options(render_study)
 
+    render_campaign = commands.add_parser("render-campaign", add_help=False)
+    render_campaign.add_argument("--campaign-id", required=True)
+    render_campaign.add_argument("--source-id")
+    _render_options(render_campaign)
+
     for name in ("inspect", "verify", "rebuild"):
         command = commands.add_parser(name, add_help=False)
         command.add_argument("--report-id", required=True)
@@ -95,7 +100,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args = parser().parse_args(list(argv) if argv is not None else None)
         if args.help:
             raise CliUsageError(
-                "use one of render-run, render-study, inspect, verify, rebuild, portal build, "
+                "use one of render-run, render-study, render-campaign, inspect, verify, rebuild, portal build, "
                 "behavior, archive, evolution"
             )
         workspace_root = args.workspace or _environment_workspace()
@@ -142,6 +147,9 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = app.render_report("replication-study", args.replication_source_id, options)
             else:
                 result = app.render_report("research-study", args.study_id, options)
+        elif args.command == "render-campaign":
+            options = _options(args, workspace_root, campaign_source_id=args.source_id)
+            result = app.render_report("campaign", args.campaign_id, options)
         elif args.command == "inspect":
             result = app.inspect(args.report_id)
         elif args.command == "verify":
@@ -178,11 +186,13 @@ def _options(
     *,
     formal_id: str | None = None,
     decision_id: str | None = None,
+    campaign_source_id: str | None = None,
 ) -> ReportOptions:
     return ReportOptions(
         workspace_root=workspace_root,
         formal_id=formal_id,
         decision_id=decision_id,
+        campaign_source_id=campaign_source_id,
         theme=args.theme,
         detail_row_limit=args.detail_row_limit,
         max_model_bytes=args.max_model_bytes,

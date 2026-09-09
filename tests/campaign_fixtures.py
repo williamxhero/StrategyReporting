@@ -291,3 +291,11 @@ def evidence_lane_campaign_source() -> dict[str, Any]:
         json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     return source
+
+
+def reidentify_campaign_source(source: dict[str, Any]) -> dict[str, Any]:
+    body = {key: value for key, value in source.items() if key != "source_id"}
+    source["source_id"] = hashlib.sha256(
+        json.dumps(body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return source

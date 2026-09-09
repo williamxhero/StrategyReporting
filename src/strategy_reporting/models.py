@@ -9,7 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from strategy_reporting.canonical import canonical_sha256, normalize_json
 
-ReportKind = Literal["formal-run", "research-study", "replication-study"]
+ReportKind = Literal["formal-run", "research-study", "replication-study", "campaign"]
 
 
 class StrictModel(BaseModel):
@@ -67,6 +67,7 @@ class ReportOptions(StrictModel):
     workspace_root: Path | None = Field(default=None, exclude=True)
     formal_id: str | None = Field(default=None, exclude=True)
     decision_id: str | None = Field(default=None, exclude=True)
+    campaign_source_id: str | None = Field(default=None, exclude=True)
     locale: Literal["zh-CN"] = "zh-CN"
     theme: Literal["paper", "dark"] = "paper"
     detail_row_limit: int = Field(default=100, ge=0, le=1_000)

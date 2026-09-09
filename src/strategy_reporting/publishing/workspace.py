@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from strategy_reporting.adapters.workspace import WorkspaceAdapter
 from strategy_reporting.canonical import bytes_sha256, canonical_sha256
+from strategy_reporting.contracts.campaign_report import CampaignReport
 from strategy_reporting.errors import ContractError, PublicationError, SourceError
 from strategy_reporting.models import (
     FormalRunReport,
@@ -101,7 +102,7 @@ class WorkspaceReportPublisher:
     def verify_semantic_descriptor(
         self,
         publication: Mapping[str, Any],
-        model: ReportModel,
+        model: ReportModel | CampaignReport,
         model_bytes: bytes,
     ) -> None:
         """Bind every descriptor claim to the persisted model, not to itself."""
@@ -208,16 +209,26 @@ class WorkspaceReportPublisher:
 
     @staticmethod
     def _identity_for_model(
-        model: ReportModel,
+        model: ReportModel | CampaignReport,
         *,
         model_bytes: bytes,
         renderer_version: str,
         options: ReportOptions,
     ) -> ReportIdentity:
         if isinstance(model, FormalRunReport):
-            kind: Literal["formal-run", "research-study", "replication-study"] = "formal-run"
+            kind: Literal["formal-run", "research-study", "replication-study", "campaign"] = (
+                "formal-run"
+            )
             subject: dict[str, Any] = model.subject.model_dump(mode="json")
             sources = [item.sha256 for item in model.source_artifacts]
+        elif isinstance(model, CampaignReport):
+            kind = "campaign"
+            subject = model.subject.model_dump(mode="json")
+            sources = [
+                model.source_publication["record_id"],
+                *(item["record_id"] for item in model.source_records),
+                *model.workspace_run_ids,
+            ]
         elif isinstance(model, ReplicationStudyReport):
             kind = "replication-study"
             subject = model.subject.model_dump(mode="json")
@@ -247,20 +258,35 @@ class WorkspaceReportPublisher:
         return WorkspaceReportPublisher._subject_id_for_model(bundle.model)
 
     @staticmethod
-    def _subject_id_for_model(model: ReportModel) -> str:
+    def _subject_id_for_model(model: ReportModel | CampaignReport) -> str:
         if isinstance(model, FormalRunReport):
             return f"workspace-run:{model.subject.workspace_run_id}#attempt:{model.subject.attempt_id}#formal:{model.subject.formal_id}"
         if isinstance(model, ReplicationStudyReport):
             return (
                 f"apex-replication:{model.subject.source_id}#decision:{model.subject.decision_id}"
             )
+        if isinstance(model, CampaignReport):
+            return f"apex-campaign:{model.subject.campaign_id}#source:{model.subject.source_id}"
         return f"apex-study:{model.subject.study_id}#decision:{model.subject.decision_id}"
 
     @staticmethod
     def _lineage(bundle: RenderedBundle) -> list[LineageEdge]:
         model = bundle.model
         raw: list[tuple[str, str, str]] = []
-        if isinstance(model, FormalRunReport):
+        if isinstance(model, CampaignReport):
+            raw.append(
+                (
+                    CAMPAIGN_SOURCE_KIND,
+                    model.source_publication["record_id"],
+                    "derived-from",
+                )
+            )
+            raw.extend(
+                (item["record_type"], item["record_id"], "derived-from")
+                for item in model.source_records
+            )
+            raw.extend(("workspace-run", item, "reports") for item in model.workspace_run_ids)
+        elif isinstance(model, FormalRunReport):
             raw.extend(
                 (
                     ("workspace-run", model.subject.workspace_run_id, "reports"),
@@ -324,3 +350,4 @@ class WorkspaceReportPublisher:
 
 APEX_SOURCE_KIND = "apex-research.study-report-source.v1"
 REPLICATION_SOURCE_KIND = "apex-research.replication-report-source.v1"
+CAMPAIGN_SOURCE_KIND = "apex-research.campaign-report-source.v1"

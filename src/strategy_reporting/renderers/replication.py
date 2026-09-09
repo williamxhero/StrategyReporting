@@ -3,6 +3,7 @@ from __future__ import annotations
 from html import escape
 
 from strategy_reporting.canonical import canonical_json
+from strategy_reporting.contracts.campaign_report import CampaignReport
 from strategy_reporting.errors import RenderError
 from strategy_reporting.html.security import stylesheet_csp, validate_html
 from strategy_reporting.models import ReplicationStudyReport, ReportModel, ReportOptions
@@ -12,7 +13,7 @@ from strategy_reporting.renderers.interface import RenderedArtifact, RenderedBun
 class ReplicationStudyRenderer:
     renderer_version = "replication-html.v1+csp.1"
 
-    def render(self, model: ReportModel, options: ReportOptions) -> RenderedBundle:
+    def render(self, model: ReportModel | CampaignReport, options: ReportOptions) -> RenderedBundle:
         if not isinstance(model, ReplicationStudyReport):
             raise RenderError(
                 "renderer_model_mismatch",

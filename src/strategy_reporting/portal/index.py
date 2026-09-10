@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from strategy_reporting.adapters.workspace import WorkspaceAdapter
+from strategy_reporting.contracts.campaign_report import CampaignReport
 from strategy_reporting.errors import ContractError, SourceError
 from strategy_reporting.models import FormalRunReport, ReportDescriptor, ResearchStudyReport
 from strategy_reporting.publishing.workspace import DESCRIPTOR_TYPE, WorkspaceReportPublisher
@@ -47,7 +48,28 @@ class PortalBuilder:
             if model_ref is None:
                 raise ContractError("portal_model_missing", f"report model missing: {report_id}")
             model_bytes = self.workspace.read_verified_bytes(model_ref.model_dump(mode="json"))
-            if descriptor.report_kind == "formal-run":
+            internal: dict[str, Any]
+            if descriptor.report_kind == "campaign":
+                campaign_model = CampaignReport.model_validate_json(model_bytes, strict=True)
+                self.publisher.verify_semantic_descriptor(
+                    publication.publication, campaign_model, model_bytes
+                )
+                entry_strategy_id = "__campaign__"
+                subject = campaign_model.subject.campaign_id
+                package = {
+                    "strategy_id": "__campaign__",
+                    "revision": None,
+                    "package_hash": campaign_model.subject.source_id,
+                }
+                internal = {
+                    "_campaign_id": campaign_model.subject.campaign_id,
+                    "_report_state": campaign_model.report_state,
+                    "summary": {
+                        "report_state": campaign_model.report_state,
+                        "source_id": campaign_model.subject.source_id,
+                    },
+                }
+            elif descriptor.report_kind == "formal-run":
                 formal_model = FormalRunReport.model_validate_json(model_bytes, strict=True)
                 self.publisher.verify_semantic_descriptor(
                     publication.publication, formal_model, model_bytes
@@ -145,14 +167,21 @@ class PortalBuilder:
                     Path("reports") / str(entry["report_id"]) / "nautilus-tearsheet.html",
                 )
                 self.workspace.materialize_verified(native_ref, native_destination)
-        packages = _package_groups(entries)
+        campaign_entries = sorted(
+            (item for item in entries if item["report_kind"] == "campaign"),
+            key=_publication_order,
+            reverse=True,
+        )
+        packages = _package_groups([item for item in entries if item["report_kind"] != "campaign"])
         public_entries = [_public_entry(item) for item in entries]
+        public_campaigns = [_public_entry(item) for item in campaign_entries]
         portal_model = {
             "schema": "strategy-reporting.portal-index.v1",
             "strategy_filter": strategy_id,
             "report_count": len(entries),
             "reports": public_entries,
             "packages": packages,
+            "campaigns": public_campaigns,
         }
         model_path = self._destination(root, Path("strategy-report-index.json"))
         model_path.write_text(
@@ -166,7 +195,7 @@ class PortalBuilder:
             encoding="utf-8",
         )
         index_path = self._destination(root, Path("index.html"))
-        index_path.write_text(_portal_html(packages), encoding="utf-8")
+        index_path.write_text(_portal_html(packages, public_campaigns), encoding="utf-8")
         return {
             "ok": True,
             "output": str(root),
@@ -182,7 +211,10 @@ class PortalBuilder:
         return candidate
 
 
-def _portal_html(packages: list[dict[str, Any]]) -> str:
+def _portal_html(
+    packages: list[dict[str, Any]], campaigns: list[dict[str, Any]] | None = None
+) -> str:
+    campaigns = campaigns or []
     sections: list[str] = []
     for package in packages:
         latest = package["latest_research"]
@@ -215,14 +247,28 @@ def _portal_html(packages: list[dict[str, Any]]) -> str:
             f"<h3>最新 Research Study Report</h3>{latest_html}"
             f"<h3>历史 Research Study Reports</h3>{history}</div></section>"
         )
-    empty = '<p class="portal-empty">当前没有已发布报告。</p>' if not sections else ""
-    report_count = sum(
-        len(group) for package in packages for group in package["formal_runs"].values()
-    ) + sum(
-        (1 if package["latest_research"] else 0) + len(package["research_history"])
-        for package in packages
+    campaign_section = ""
+    if campaigns:
+        campaign_rows = "".join(_entry_row(item) for item in campaigns)
+        campaign_section = (
+            '<section class="campaign-portal"><header class="package-header">'
+            "<div><span>Campaign reports</span><h2>AI Research Campaigns</h2></div></header>"
+            f'<div class="portal-column research-column">{campaign_rows}</div></section>'
+        )
+    empty = (
+        '<p class="portal-empty">当前没有已发布报告。</p>'
+        if not sections and not campaign_section
+        else ""
     )
-    return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>Strategy Reporting Portal</title><style>{_portal_css()}</style></head><body><main><header class="portal-header"><div class="eyebrow">Strategy Reporting · Offline portal</div><h1>策略研究报告库</h1><p>从 Workspace 已验证 publication 构建的离线入口。正式运行、研究结论与历史版本按策略包归档; 不在门户中二次计算任何指标。</p><div class="portal-count"><strong>{report_count}</strong><span>份报告</span><strong>{len(packages)}</strong><span>个策略包</span></div></header>{empty}{"".join(sections)}<footer>确定性构建 · 自包含资源 · Workspace public contract only</footer></main></body></html>"""
+    report_count = (
+        sum(len(group) for package in packages for group in package["formal_runs"].values())
+        + sum(
+            (1 if package["latest_research"] else 0) + len(package["research_history"])
+            for package in packages
+        )
+        + len(campaigns)
+    )
+    return f"""<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'"><title>Strategy Reporting Portal</title><style>{_portal_css()}</style></head><body><main><header class="portal-header"><div class="eyebrow">Strategy Reporting · Offline portal</div><h1>策略研究报告库</h1><p>从 Workspace 已验证 publication 构建的离线入口。正式运行、研究结论与历史版本按策略包归档; 不在门户中二次计算任何指标。</p><div class="portal-count"><strong>{report_count}</strong><span>份报告</span><strong>{len(packages)}</strong><span>个策略包</span></div></header>{empty}{campaign_section}{"".join(sections)}<footer>确定性构建 · 自包含资源 · Workspace public contract only</footer></main></body></html>"""
 
 
 def _portal_css() -> str:
@@ -391,6 +437,8 @@ def _entry_row(item: dict[str, Any]) -> str:
             f"{summary.get('start', '—')} — {summary.get('end', '—')} · "
             f"{summary.get('outcome', '—')}"
         )
+    elif item.get("report_kind") == "campaign":
+        scope = f"campaign {item.get('subject', '—')} · state {summary.get('report_state', '—')}"
     else:
         scope = (
             f"{summary.get('trial_count', '—')} trials · "

@@ -19,6 +19,18 @@ class WorkspaceClientPort(Protocol):
     def list_records(
         self, *, record_type: str | None = None, limit: int = 100
     ) -> list[dict[str, Any]]: ...
+    def query_lineage(
+        self,
+        *,
+        roots: Iterable[Mapping[str, Any]],
+        direction: str,
+        relations: Iterable[str] = (),
+        record_types: Iterable[str] = (),
+        max_depth: int = 1,
+        page_size: int = 100,
+        cursor: str | None = None,
+        snapshot_token: str | None = None,
+    ) -> dict[str, Any]: ...
     def read_artifact(self, artifact_uri: str) -> dict[str, Any]: ...
     def materialize_artifact(self, artifact_uri: str, destination: Path) -> dict[str, Any]: ...
     def verify_artifact(self, artifact_uri: str) -> dict[str, Any]: ...

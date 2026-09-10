@@ -14,3 +14,10 @@ def research_stylesheet() -> str:
         files("strategy_reporting.html").joinpath("static/research.css").read_text(encoding="utf-8")
     )
     return f"{stylesheet()}\n{research}"
+
+
+def campaign_stylesheet() -> str:
+    campaign = (
+        files("strategy_reporting.html").joinpath("static/campaign.css").read_text(encoding="utf-8")
+    )
+    return f"{stylesheet()}\n{campaign}"

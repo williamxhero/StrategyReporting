@@ -16,7 +16,7 @@ dependencies = [
   "nautilus_trader[visualization]==1.231.0",
   "pandas>=2.2,<4",
   "pydantic>=2.11,<3",
-  "strategy-workspace==0.1.0",
+  "strategy-workspace>=0.1.0,<0.3",
 ]
 
 [project.optional-dependencies]
@@ -42,9 +42,14 @@ artifacts = [
 ]
 
 [tool.pytest.ini_options]
-addopts = "-q"
+addopts = '-q -m "not slow and not oci and not connected and not release"'
 testpaths = ["tests"]
-markers = ["connected: requires a live Strategy Workspace or upstream service"]
+markers = [
+  "connected: requires a live Strategy Workspace or upstream service",
+  "oci: requires an OCI runtime",
+  "release: runs only at a release-train gate",
+  "slow: exceeds the ordinary 2-second case or 60-second file budget",
+]
 
 [tool.ruff]
 target-version = "py312"

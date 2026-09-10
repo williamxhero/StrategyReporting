@@ -5,6 +5,7 @@ from typing import Any
 from markupsafe import Markup
 
 from strategy_reporting.canonical import canonical_json
+from strategy_reporting.contracts.campaign_report import CampaignReport
 from strategy_reporting.errors import RenderError
 from strategy_reporting.html.assets import research_stylesheet
 from strategy_reporting.html.security import stylesheet_csp, validate_html
@@ -30,9 +31,9 @@ _OPERATOR_LABELS = {
 
 
 class ResearchStudyRenderer:
-    renderer_version = "research-html.v1+template.3.2+csp.1"
+    renderer_version = "research-html.v1+template.3.3+csp.1"
 
-    def render(self, model: ReportModel, options: ReportOptions) -> RenderedBundle:
+    def render(self, model: ReportModel | CampaignReport, options: ReportOptions) -> RenderedBundle:
         if not isinstance(model, ResearchStudyReport):
             raise RenderError(
                 "renderer_model_mismatch", "research renderer requires ResearchStudyReport"
@@ -166,6 +167,40 @@ def _research_view(model: ResearchStudyReport) -> dict[str, Any]:
             if leg.get("effective_at") is not None
         }
     )
+    validation = _mapping(model.validation)
+    validation_view = None
+    if validation:
+        validation_view = {
+            "evidence_id": validation.get("evidence_id"),
+            "complete": validation.get("complete"),
+            "denominator": validation.get("denominator"),
+            "covered_cells": validation.get("covered_cells"),
+            "status_counts": sorted(_mapping(validation.get("status_counts")).items()),
+            "gaps": _list_of_mappings(validation.get("gaps")),
+            "metric_groups": [
+                {
+                    "metric": group.get("metric"),
+                    "group_id": group.get("group_id"),
+                    "comparability": _mapping(group.get("comparability")),
+                    "cells": _list_of_mappings(group.get("cells")),
+                    "values_micros": _list(group.get("values_micros")),
+                }
+                for group in _list_of_mappings(validation.get("metric_groups"))
+            ],
+            "aggregation_policy": validation.get("aggregation_policy"),
+        }
+    statistical = _mapping(model.statistical)
+    statistical_view = None
+    if statistical:
+        multiple_testing = _mapping(statistical.get("multiple_testing"))
+        statistical_view = {
+            "assessment_id": statistical.get("assessment_id"),
+            "status": statistical.get("status"),
+            "purge_embargo": _mapping(statistical.get("purge_embargo")),
+            "holm": _mapping(multiple_testing.get("holm")),
+            "benjamini_hochberg": _mapping(multiple_testing.get("benjamini_hochberg")),
+            "deflated_sharpe": _mapping(statistical.get("deflated_sharpe")),
+        }
     return {
         "strategy_id": model.strategy_package.get("strategy_id") or "unknown",
         "revision": model.strategy_package.get("revision") or "—",
@@ -186,6 +221,8 @@ def _research_view(model: ResearchStudyReport) -> dict[str, Any]:
         "research_metrics": [
             (str(key), _display(value)) for key, value in sorted(model.research_metrics.items())
         ],
+        "validation": validation_view,
+        "statistical": statistical_view,
         "availability": (
             ("探索阶段", model.discovery),
             ("稳健性", model.robustness),

@@ -13,9 +13,14 @@ from strategy_reporting.adapters import (
     WorkspaceClientPort,
     WorkspaceFormalRunAdapter,
 )
+from strategy_reporting.adapters.genome_coverage import GenomeCoverageReadModelBuilder
 from strategy_reporting.adapters.workspace import production_client
 from strategy_reporting.canonical import bytes_sha256
 from strategy_reporting.contracts.campaign_report import CampaignReport, CampaignReportSource
+from strategy_reporting.contracts.genome_coverage import (
+    GenomeCoverageReadModel,
+    GenomeCoverageSource,
+)
 from strategy_reporting.errors import ContractError
 from strategy_reporting.models import (
     FormalRunReport,
@@ -45,6 +50,14 @@ class ReportingApplication:
         self, campaign_id: str, *, source_id: str | None = None
     ) -> CampaignReport:
         return CampaignReadModelBuilder(self.workspace).build(campaign_id, source_id=source_id)
+
+    def read_genome_coverage(
+        self, source_id: str, *, record_type: str = "apex-research.genome-report-source.v1"
+    ) -> GenomeCoverageReadModel:
+        """Read an owner-published Genome coverage projection through the public flow."""
+        return GenomeCoverageReadModelBuilder(self.workspace).read(
+            GenomeCoverageSource(record_id=source_id, record_type=record_type)
+        )
 
     def render_report(
         self, subject_kind: ReportKind, subject_id: str, options: ReportOptions

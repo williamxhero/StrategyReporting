@@ -6,6 +6,7 @@ from strategy_reporting.adapters.campaign_source import (
 )
 from strategy_reporting.adapters.evidence_v2 import EvidenceV2ReadModelBuilder
 from strategy_reporting.adapters.formal_run import WorkspaceFormalRunAdapter
+from strategy_reporting.adapters.genome_coverage import GenomeCoverageReadModelBuilder
 from strategy_reporting.adapters.quality_diversity_archives import (
     QualityDiversityArchiveReadModelBuilder,
 )
@@ -19,6 +20,7 @@ __all__ = [
     "CampaignReadModelBuilder",
     "CampaignReportSourceAdapter",
     "EvidenceV2ReadModelBuilder",
+    "GenomeCoverageReadModelBuilder",
     "QualityDiversityArchiveReadModelBuilder",
     "ReplicationReadModelBuilder",
     "RevalidationReadModelBuilder",

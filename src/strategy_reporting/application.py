@@ -9,6 +9,7 @@ from strategy_reporting.adapters import (
     CampaignReadModelBuilder,
     CampaignReportSourceAdapter,
     ReplicationReadModelBuilder,
+    StrategyReportV0Adapter,
     WorkspaceAdapter,
     WorkspaceClientPort,
     WorkspaceFormalRunAdapter,
@@ -30,6 +31,7 @@ from strategy_reporting.models import (
     ReportOptions,
     ReportPublication,
     ResearchStudyReport,
+    StrategyReportV0,
 )
 from strategy_reporting.publishing import WorkspaceReportPublisher
 from strategy_reporting.renderers import RendererRegistry
@@ -69,6 +71,8 @@ class ReportingApplication:
             model = ApexResearchPublicationAdapter(self.workspace).build_model(subject_id, options)
         elif subject_kind == "replication-study":
             model = ReplicationReadModelBuilder(self.workspace).build_model(subject_id, options)
+        elif subject_kind == "strategy-report-v0":
+            model = StrategyReportV0Adapter(self.workspace).build_model(subject_id, options)
         elif subject_kind == "campaign":
             model = CampaignReadModelBuilder(self.workspace).build(
                 subject_id, source_id=options.campaign_source_id
@@ -129,6 +133,8 @@ class ReportingApplication:
                 return ResearchStudyReport.model_validate_json(content, strict=True)
             if schema == "strategy-reporting.replication-study-report.v1":
                 return ReplicationStudyReport.model_validate_json(content, strict=True)
+            if schema == "strategy-reporting.strategy-report-v0.v1":
+                return StrategyReportV0.model_validate_json(content, strict=True)
             if schema == "strategy-reporting.campaign-report.v1":
                 return CampaignReport.model_validate_json(content, strict=True)
             raise ValueError(f"unsupported report model schema: {schema}")

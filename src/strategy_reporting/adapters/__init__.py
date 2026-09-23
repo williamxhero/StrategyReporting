@@ -12,6 +12,7 @@ from strategy_reporting.adapters.quality_diversity_archives import (
 )
 from strategy_reporting.adapters.replication import ReplicationReadModelBuilder
 from strategy_reporting.adapters.revalidation import RevalidationReadModelBuilder
+from strategy_reporting.adapters.strategy_v0 import StrategyReportV0Adapter
 from strategy_reporting.adapters.workspace import WorkspaceAdapter, WorkspaceClientPort
 
 __all__ = [
@@ -24,6 +25,7 @@ __all__ = [
     "QualityDiversityArchiveReadModelBuilder",
     "ReplicationReadModelBuilder",
     "RevalidationReadModelBuilder",
+    "StrategyReportV0Adapter",
     "WorkspaceAdapter",
     "WorkspaceClientPort",
     "WorkspaceFormalRunAdapter",

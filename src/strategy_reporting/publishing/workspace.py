@@ -17,6 +17,7 @@ from strategy_reporting.models import (
     ReportModel,
     ReportOptions,
     ReportPublication,
+    StrategyReportV0,
 )
 from strategy_reporting.renderers.interface import RenderedBundle
 
@@ -216,9 +217,13 @@ class WorkspaceReportPublisher:
         options: ReportOptions,
     ) -> ReportIdentity:
         if isinstance(model, FormalRunReport):
-            kind: Literal["formal-run", "research-study", "replication-study", "campaign"] = (
-                "formal-run"
-            )
+            kind: Literal[
+                "formal-run",
+                "research-study",
+                "replication-study",
+                "campaign",
+                "strategy-report-v0",
+            ] = "formal-run"
             subject: dict[str, Any] = model.subject.model_dump(mode="json")
             sources = [item.sha256 for item in model.source_artifacts]
         elif isinstance(model, CampaignReport):
@@ -236,6 +241,10 @@ class WorkspaceReportPublisher:
                 model.source_publication["record_id"],
                 *(item["record_id"] for item in model.source_records),
             ]
+        elif isinstance(model, StrategyReportV0):
+            kind = "strategy-report-v0"
+            subject = {"subject_id": model.subject_id, "source_id": model.source_id}
+            sources = [model.source_id, *model.source_record_ids]
         else:
             kind = "research-study"
             subject = model.subject.model_dump(mode="json")
@@ -267,6 +276,8 @@ class WorkspaceReportPublisher:
             )
         if isinstance(model, CampaignReport):
             return f"apex-campaign:{model.subject.campaign_id}#source:{model.subject.source_id}"
+        if isinstance(model, StrategyReportV0):
+            return f"apex-strategy-report-v0:{model.subject_id}#source:{model.source_id}"
         return f"apex-study:{model.subject.study_id}#decision:{model.subject.decision_id}"
 
     @staticmethod
@@ -306,6 +317,12 @@ class WorkspaceReportPublisher:
             raw.extend(
                 (item["record_type"], item["record_id"], "derived-from")
                 for item in model.source_records
+            )
+        elif isinstance(model, StrategyReportV0):
+            raw.append(("apex-research.study-report-source.v2", model.source_id, "derived-from"))
+            raw.extend(
+                ("apex-report-source-record", item, "derived-from")
+                for item in model.source_record_ids
             )
         else:
             raw.append((APEX_SOURCE_KIND, model.source_publication["record_id"], "derived-from"))

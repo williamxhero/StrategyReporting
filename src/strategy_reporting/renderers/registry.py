@@ -7,12 +7,14 @@ from strategy_reporting.models import (
     ReplicationStudyReport,
     ReportModel,
     ResearchStudyReport,
+    StrategyReportV0,
 )
 from strategy_reporting.renderers.campaign import CampaignRenderer
 from strategy_reporting.renderers.formal_run import FormalRunRenderer
 from strategy_reporting.renderers.interface import ReportRenderer
 from strategy_reporting.renderers.replication import ReplicationStudyRenderer
 from strategy_reporting.renderers.research_study import ResearchStudyRenderer
+from strategy_reporting.renderers.strategy_v0 import StrategyReportV0Renderer
 
 
 class RendererRegistry:
@@ -20,6 +22,7 @@ class RendererRegistry:
         self._formal = FormalRunRenderer()
         self._research = ResearchStudyRenderer()
         self._replication = ReplicationStudyRenderer()
+        self._strategy_v0 = StrategyReportV0Renderer()
         self._campaign = CampaignRenderer()
 
     def resolve(self, model: ReportModel | CampaignReport) -> ReportRenderer:
@@ -31,4 +34,6 @@ class RendererRegistry:
             return self._research
         if isinstance(model, ReplicationStudyReport):
             return self._replication
+        if isinstance(model, StrategyReportV0):
+            return self._strategy_v0
         raise RenderError("renderer_not_registered", f"no renderer for {type(model).__name__}")

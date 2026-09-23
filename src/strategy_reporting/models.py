@@ -9,7 +9,9 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from strategy_reporting.canonical import canonical_sha256, normalize_json
 
-ReportKind = Literal["formal-run", "research-study", "replication-study", "campaign"]
+ReportKind = Literal[
+    "formal-run", "research-study", "replication-study", "campaign", "strategy-report-v0"
+]
 
 
 class StrictModel(BaseModel):
@@ -249,6 +251,24 @@ class ResearchStudyReport(StrictModel):
     workspace_run_ids: list[str]
 
 
+class StrategyReportV0(StrictModel):
+    schema_id: Literal["strategy-reporting.strategy-report-v0.v1"] = Field(
+        default="strategy-reporting.strategy-report-v0.v1", alias="schema"
+    )
+    title: str
+    subject_id: str = Field(min_length=1)
+    source_id: str = Field(pattern=r"^[0-9a-f]{64}$")
+    template_id: Literal["StrategyReport-v0"] = "StrategyReport-v0"
+    template_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    applicability: dict[str, Any]
+    evidence_level: str
+    decision: str
+    limitations: list[str]
+    sections: list[dict[str, Any]] = Field(min_length=1)
+    source_publication: dict[str, str]
+    source_record_ids: list[str] = Field(min_length=1)
+
+
 class ReplicationSubject(StrictModel):
     source_id: str = Field(pattern=r"^[0-9a-f]{64}$")
     campaign_id: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -287,4 +307,4 @@ class ReplicationStudyReport(StrictModel):
         return self
 
 
-ReportModel = FormalRunReport | ResearchStudyReport | ReplicationStudyReport
+ReportModel = FormalRunReport | ResearchStudyReport | ReplicationStudyReport | StrategyReportV0

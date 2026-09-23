@@ -58,6 +58,11 @@ def parser() -> StrictParser:
     render_study.add_argument("--decision-id")
     _render_options(render_study)
 
+    render_strategy = commands.add_parser("render-strategy-v0", add_help=False)
+    render_strategy.add_argument("--subject-id", required=True)
+    render_strategy.add_argument("--source-id")
+    _render_options(render_strategy)
+
     render_campaign = commands.add_parser("render-campaign", add_help=False)
     render_campaign.add_argument("--campaign-id", required=True)
     render_campaign.add_argument("--source-id")
@@ -100,7 +105,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         args = parser().parse_args(list(argv) if argv is not None else None)
         if args.help:
             raise CliUsageError(
-                "use one of render-run, render-study, render-campaign, inspect, verify, rebuild, portal build, "
+                "use one of render-run, render-study, render-strategy-v0, render-campaign, inspect, verify, rebuild, portal build, "
                 "behavior, archive, evolution"
             )
         workspace_root = args.workspace or _environment_workspace()
@@ -141,6 +146,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "render-run":
             options = _options(args, workspace_root, formal_id=args.formal_id)
             result = app.render_report("formal-run", args.run_id, options)
+        elif args.command == "render-strategy-v0":
+            options = _options(args, workspace_root, source_id=args.source_id)
+            result = app.render_report("strategy-report-v0", args.subject_id, options)
         elif args.command == "render-study":
             options = _options(args, workspace_root, decision_id=args.decision_id)
             if args.replication_source_id:
@@ -187,12 +195,14 @@ def _options(
     formal_id: str | None = None,
     decision_id: str | None = None,
     campaign_source_id: str | None = None,
+    source_id: str | None = None,
 ) -> ReportOptions:
     return ReportOptions(
         workspace_root=workspace_root,
         formal_id=formal_id,
         decision_id=decision_id,
         campaign_source_id=campaign_source_id,
+        source_id=source_id,
         theme=args.theme,
         detail_row_limit=args.detail_row_limit,
         max_model_bytes=args.max_model_bytes,

@@ -30,7 +30,6 @@ from strategy_reporting.models import (
     ReplicationStudyReport,
     ReportOptions,
     ReportPublication,
-    StrategyReportV0,
 )
 from strategy_reporting.renderers.revalidation import RevalidationRenderer
 
@@ -59,6 +58,5 @@ __all__ = [
     "RevalidationReadModelBuilder",
     "RevalidationRecordRef",
     "RevalidationRenderer",
-    "StrategyReportV0",
     "render_report",
 ]

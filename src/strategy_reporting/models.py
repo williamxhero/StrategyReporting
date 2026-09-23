@@ -12,6 +12,10 @@ from strategy_reporting.canonical import canonical_sha256, normalize_json
 ReportKind = Literal[
     "formal-run", "research-study", "replication-study", "campaign", "strategy-report-v0"
 ]
+ConclusionDecision = Literal[
+    "supports", "does_not_support", "uncertain", "stopped_or_blocked", "not_evaluated"
+]
+ConclusionEvidenceLevel = Literal["candidate_evidence", "protocol_conforming", "not_evaluated"]
 
 
 class StrictModel(BaseModel):
@@ -70,6 +74,7 @@ class ReportOptions(StrictModel):
     formal_id: str | None = Field(default=None, exclude=True)
     decision_id: str | None = Field(default=None, exclude=True)
     campaign_source_id: str | None = Field(default=None, exclude=True)
+    source_id: str | None = None
     locale: Literal["zh-CN"] = "zh-CN"
     theme: Literal["paper", "dark"] = "paper"
     detail_row_limit: int = Field(default=100, ge=0, le=1_000)
@@ -261,8 +266,8 @@ class StrategyReportV0(StrictModel):
     template_id: Literal["StrategyReport-v0"] = "StrategyReport-v0"
     template_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
     applicability: dict[str, Any]
-    evidence_level: str
-    decision: str
+    evidence_level: ConclusionEvidenceLevel
+    decision: ConclusionDecision
     limitations: list[str]
     sections: list[dict[str, Any]] = Field(min_length=1)
     source_publication: dict[str, str]

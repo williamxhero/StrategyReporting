@@ -1,6 +1,7 @@
 from collections.abc import Iterable, Mapping
 from typing import Any
 
+from strategy_reporting import cli
 from strategy_reporting.adapters.strategy_v0 import StrategyReportV0Adapter
 from strategy_reporting.adapters.workspace import WorkspaceAdapter
 from strategy_reporting.models import ReportOptions
@@ -10,19 +11,44 @@ from strategy_reporting.renderers import RendererRegistry
 class Client:
     def __init__(self) -> None:
         self.published: list[dict[str, Any]] = []
-        self.records: dict[str, dict[str, Any]] = {}
+        self.records: dict[str, dict[str, Any]] = {
+            "b" * 64: {
+                "schema": "quant-research.publication.v1",
+                "record_id": "b" * 64,
+                "record_type": "registration",
+                "created_at": "2026-09-23T00:00:00Z",
+                "payload": {"schema": "registration", "registration_id": "b" * 64},
+                "artifacts": [],
+                "lineage": [],
+            },
+            "c" * 64: {
+                "schema": "quant-research.publication.v1",
+                "record_id": "c" * 64,
+                "record_type": "apex-research.research-conclusion.v1",
+                "created_at": "2026-09-23T00:00:00Z",
+                "payload": {
+                    "schema": "apex-research.research-conclusion.v1",
+                    "conclusion_id": "c" * 64,
+                    "decision": "supports",
+                    "evidence_level": "candidate_evidence",
+                    "limitations": [],
+                },
+                "artifacts": [],
+                "lineage": [],
+            },
+        }
 
     def list_records(
         self, *, record_type: str | None = None, limit: int = 100
     ) -> list[dict[str, Any]]:
-        if record_type != "apex-research.study-report-source.v2":
+        if record_type != "apex-research.strategy-report-source.v1":
             return []
         return [
             {
                 "record_id": "a" * 64,
-                "record_type": "apex-research.study-report-source.v2",
+                "record_type": "apex-research.strategy-report-source.v1",
                 "payload": {
-                    "schema": "apex-research.study-report-source.v2",
+                    "schema": "apex-research.strategy-report-source.v1",
                     "source_id": "a" * 64,
                     "research": {"record_id": "b" * 64, "record_type": "registration"},
                     "registration": {"record_id": "b" * 64, "record_type": "registration"},
@@ -77,11 +103,29 @@ class Client:
         return self.records.get(record_id)
 
 
+def test_strategy_report_v0_cli_command_carries_explicit_source_identity() -> None:
+    parsed = cli.parser().parse_args(
+        [
+            "render-strategy-v0",
+            "--subject-id",
+            "b" * 64,
+            "--source-id",
+            "a" * 64,
+        ]
+    )
+    assert parsed.command == "render-strategy-v0"
+    assert parsed.subject_id == "b" * 64
+    assert parsed.source_id == "a" * 64
+
+
 def test_strategy_report_v0_is_deterministic_and_marks_missing_facts() -> None:
     client = Client()
     options = ReportOptions()
     first_model = StrategyReportV0Adapter(WorkspaceAdapter(client)).build_model("b" * 64, options)
     second_model = StrategyReportV0Adapter(WorkspaceAdapter(client)).build_model("b" * 64, options)
+    assert first_model.decision == "supports"
+    assert first_model.evidence_level == "candidate_evidence"
+    assert first_model.source_record_ids == ["a" * 64, "b" * 64, "c" * 64]
     registry = RendererRegistry()
     first = registry.resolve(first_model).render(first_model, options)
     second = registry.resolve(second_model).render(second_model, options)

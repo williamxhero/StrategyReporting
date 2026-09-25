@@ -271,6 +271,9 @@ class StrategyReportV0(StrictModel):
     limitations: list[str]
     sections: list[dict[str, Any]] = Field(min_length=1)
     source_publication: dict[str, str]
+    source_records: list[dict[str, str]] | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
     source_record_ids: list[str] = Field(min_length=1)
 
 

@@ -13,7 +13,8 @@ from strategy_reporting.models import (
     StrategyReportV0,
 )
 
-SOURCE_TYPE = "apex-research.strategy-report-source.v1"
+LEGACY_SOURCE_TYPE = "apex-research.strategy-report-source.v1"
+V2_SOURCE_TYPE = "apex-research.strategy-report-source.v2"
 PUBLICATION_SCHEMA = "quant-research.publication.v1"
 CONCLUSION_TYPE = "apex-research.research-conclusion.v1"
 TEMPLATE_ID = "StrategyReport-v0"
@@ -25,32 +26,13 @@ class StrategyReportV0Adapter:
         self.workspace = workspace
 
     def build_model(self, subject_id: str, options: ReportOptions) -> StrategyReportV0:
-        try:
-            records = self.workspace.client.list_records(record_type=SOURCE_TYPE, limit=10_000)
-        except Exception as exc:
-            raise SourceError(
-                "strategy_report_source_read_failed", "cannot list strategy report sources"
-            ) from exc
-        candidates = [
-            item
-            for item in records
-            if isinstance(item, dict)
-            and isinstance(item.get("payload"), dict)
-            and self._matches(item["payload"], subject_id)
-            and (options.source_id is None or item.get("record_id") == options.source_id)
-        ]
-        if not candidates:
-            raise SourceError(
-                "strategy_report_source_missing",
-                f"no {SOURCE_TYPE} publication for {subject_id}",
-            )
-        selected = self._select(candidates)
+        selected, source_type = self._source_publication(subject_id, options)
         payload = as_object(selected.get("payload"), "strategy report source")
-        if payload.get("schema") != SOURCE_TYPE:
+        if payload.get("schema") != source_type:
             raise ContractError("strategy_report_source_schema", "source schema differs")
         source_id = payload.get("source_id")
         if not isinstance(source_id, str) or (
-            selected.get("record_id") != source_id or selected.get("record_type") != SOURCE_TYPE
+            selected.get("record_id") != source_id or selected.get("record_type") != source_type
         ):
             raise ContractError(
                 "strategy_report_source_identity", "source publication identity differs"
@@ -81,10 +63,75 @@ class StrategyReportV0Adapter:
             sections=sections,
             source_publication={
                 "record_id": source_id,
-                "record_type": SOURCE_TYPE,
+                "record_type": source_type,
             },
             source_record_ids=sorted({record_id for _, record_id in references} | {source_id}),
         )
+
+    def _source_publication(
+        self, subject_id: str, options: ReportOptions
+    ) -> tuple[dict[str, Any], str]:
+        legacy = self._matching_sources(LEGACY_SOURCE_TYPE, subject_id, options.source_id)
+        if legacy:
+            return self._select(legacy), LEGACY_SOURCE_TYPE
+        if options.source_id is not None:
+            return self._read_v2_source(options.source_id, subject_id), V2_SOURCE_TYPE
+        if self._matching_sources(V2_SOURCE_TYPE, subject_id, None):
+            raise ContractError(
+                "strategy_report_source_id_required",
+                f"{V2_SOURCE_TYPE} requires --source-id",
+            )
+        raise SourceError(
+            "strategy_report_source_missing",
+            f"no {LEGACY_SOURCE_TYPE} or {V2_SOURCE_TYPE} publication for {subject_id}",
+        )
+
+    def _matching_sources(
+        self, source_type: str, subject_id: str, source_id: str | None
+    ) -> list[dict[str, Any]]:
+        try:
+            records = self.workspace.client.list_records(record_type=source_type, limit=10_000)
+        except Exception as exc:
+            raise SourceError(
+                "strategy_report_source_read_failed", "cannot list strategy report sources"
+            ) from exc
+        return [
+            item
+            for item in records
+            if isinstance(item, dict)
+            and isinstance(item.get("payload"), dict)
+            and self._matches(item["payload"], subject_id)
+            and (source_id is None or item.get("record_id") == source_id)
+        ]
+
+    def _read_v2_source(self, source_id: str, subject_id: str) -> dict[str, Any]:
+        try:
+            raw = self.workspace.client.get_record(source_id)
+        except Exception as exc:
+            raise SourceError(
+                "strategy_report_source_read_failed", "cannot read strategy report source"
+            ) from exc
+        if not isinstance(raw, Mapping):
+            raise SourceError("strategy_report_source_missing", "strategy report source is missing")
+        selected = dict(raw)
+        payload = selected.get("payload")
+        if (
+            selected.get("schema") != PUBLICATION_SCHEMA
+            or selected.get("record_id") != source_id
+            or selected.get("record_type") != V2_SOURCE_TYPE
+            or not isinstance(payload, Mapping)
+            or payload.get("schema") != V2_SOURCE_TYPE
+            or payload.get("source_id") != source_id
+        ):
+            raise ContractError(
+                "strategy_report_source_identity", "source publication identity differs"
+            )
+        if not self._matches(dict(payload), subject_id):
+            raise SourceError(
+                "strategy_report_source_missing",
+                f"no {V2_SOURCE_TYPE} publication for {subject_id}",
+            )
+        return selected
 
     @staticmethod
     def _matches(payload: dict[str, Any], subject_id: str) -> bool:

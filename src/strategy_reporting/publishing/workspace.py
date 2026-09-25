@@ -319,7 +319,7 @@ class WorkspaceReportPublisher:
                 for item in model.source_records
             )
         elif isinstance(model, StrategyReportV0):
-            raw.append((STRATEGY_REPORT_SOURCE_KIND, model.source_id, "derived-from"))
+            raw.append((model.source_publication["record_type"], model.source_id, "derived-from"))
             raw.extend(
                 ("apex-report-source-record", item, "derived-from")
                 for item in model.source_record_ids
@@ -367,5 +367,4 @@ class WorkspaceReportPublisher:
 
 APEX_SOURCE_KIND = "apex-research.study-report-source.v1"
 REPLICATION_SOURCE_KIND = "apex-research.replication-report-source.v1"
-STRATEGY_REPORT_SOURCE_KIND = "apex-research.strategy-report-source.v1"
 CAMPAIGN_SOURCE_KIND = "apex-research.campaign-report-source.v1"

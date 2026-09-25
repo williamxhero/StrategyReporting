@@ -25,6 +25,7 @@ V2_SOURCE_ID = "d" * 64
 CONCLUSION_ID = "c" * 64
 ASSESSMENT_ID = "e" * 64
 PREREQUISITE_ID = "f" * 64
+RUNTIME_FACTS_ID = "9" * 64
 CONCLUSION_TYPE = "apex-research.research-conclusion.v1"
 
 
@@ -114,6 +115,11 @@ class Client:
                 "prerequisite_id": PREREQUISITE_ID,
             },
         )
+        self.records[RUNTIME_FACTS_ID] = self._publication(
+            RUNTIME_FACTS_ID,
+            "apex-research.study-runtime-facts.v1",
+            {"schema": "apex-research.study-runtime-facts.v1", "facts_id": RUNTIME_FACTS_ID},
+        )
         self.records[V2_SOURCE_ID] = self._publication(
             V2_SOURCE_ID,
             V2_SOURCE_TYPE,
@@ -133,6 +139,12 @@ class Client:
                     {
                         "record_id": ASSESSMENT_ID,
                         "record_type": "apex-research.protocol-assessment.v1",
+                    }
+                ],
+                "runtime_facts": [
+                    {
+                        "record_id": RUNTIME_FACTS_ID,
+                        "record_type": "apex-research.study-runtime-facts.v1",
                     }
                 ],
                 "conclusion": {"record_id": CONCLUSION_ID, "record_type": CONCLUSION_TYPE},
@@ -312,9 +324,14 @@ def test_v2_strategy_report_preserves_source_facts_and_is_deterministic() -> Non
             "record_id": CONCLUSION_ID,
             "record_type": CONCLUSION_TYPE,
         },
+        {
+            "record_id": RUNTIME_FACTS_ID,
+            "record_type": "apex-research.study-runtime-facts.v1",
+        },
         {"record_id": SUBJECT_ID, "record_type": "registration"},
     ]
     assert first_model.source_record_ids == [
+        RUNTIME_FACTS_ID,
         SUBJECT_ID,
         CONCLUSION_ID,
         V2_SOURCE_ID,
@@ -354,5 +371,10 @@ def test_v2_strategy_report_publication_lineage_uses_source_record_type() -> Non
         "derived-from",
     ) in lineage
     assert (CONCLUSION_TYPE, CONCLUSION_ID, "derived-from") in lineage
+    assert (
+        "apex-research.study-runtime-facts.v1",
+        RUNTIME_FACTS_ID,
+        "derived-from",
+    ) in lineage
     assert (LEGACY_SOURCE_TYPE, source_id, "derived-from") not in lineage
     assert not any(kind == "apex-report-source-record" for kind, _, _ in lineage)

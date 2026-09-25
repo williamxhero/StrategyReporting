@@ -164,6 +164,7 @@ class StrategyReportV0Adapter:
             "registration",
             "assessments",
             "exposures",
+            "runtime_facts",
             "conclusion",
             "conclusion_history",
             "revisions",

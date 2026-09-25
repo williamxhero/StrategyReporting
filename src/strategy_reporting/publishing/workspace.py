@@ -320,10 +320,16 @@ class WorkspaceReportPublisher:
             )
         elif isinstance(model, StrategyReportV0):
             raw.append((model.source_publication["record_type"], model.source_id, "derived-from"))
-            raw.extend(
-                ("apex-report-source-record", item, "derived-from")
-                for item in model.source_record_ids
-            )
+            if model.source_records is None:
+                raw.extend(
+                    ("apex-report-source-record", item, "derived-from")
+                    for item in model.source_record_ids
+                )
+            else:
+                raw.extend(
+                    (item["record_type"], item["record_id"], "derived-from")
+                    for item in model.source_records
+                )
         else:
             raw.append((APEX_SOURCE_KIND, model.source_publication["record_id"], "derived-from"))
             raw.append(

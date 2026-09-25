@@ -225,6 +225,7 @@ def test_legacy_v1_strategy_report_remains_deterministic_and_marks_missing_facts
     assert first_model.decision == "supports"
     assert first_model.evidence_level == "candidate_evidence"
     assert first_model.source_publication["record_type"] == LEGACY_SOURCE_TYPE
+    assert first_model.source_records is None
     assert first_model.source_record_ids == [LEGACY_SOURCE_ID, SUBJECT_ID, CONCLUSION_ID]
     registry = RendererRegistry()
     first = registry.resolve(first_model).render(first_model, options)
@@ -267,6 +268,17 @@ def test_v2_strategy_report_validates_every_public_reference() -> None:
         )
 
 
+def test_v2_strategy_report_rejects_reference_payload_schema_mismatch() -> None:
+    client = Client(legacy=False)
+    source_id = client.add_v2_source()
+    client.records[ASSESSMENT_ID]["payload"]["schema"] = "tampered-payload-schema"
+
+    with pytest.raises(ContractError, match="source reference readback differs"):
+        StrategyReportV0Adapter(WorkspaceAdapter(client)).build_model(
+            SUBJECT_ID, ReportOptions(source_id=source_id)
+        )
+
+
 def test_v2_strategy_report_preserves_source_facts_and_is_deterministic() -> None:
     client = Client(legacy=False)
     source_id = client.add_v2_source()
@@ -287,6 +299,21 @@ def test_v2_strategy_report_preserves_source_facts_and_is_deterministic() -> Non
         "history": "published conclusion history",
         "differences": "source-declared only",
     }
+    assert first_model.source_records == [
+        {
+            "record_id": PREREQUISITE_ID,
+            "record_type": "apex-research.framework-change-prerequisite.v1",
+        },
+        {
+            "record_id": ASSESSMENT_ID,
+            "record_type": "apex-research.protocol-assessment.v1",
+        },
+        {
+            "record_id": CONCLUSION_ID,
+            "record_type": CONCLUSION_TYPE,
+        },
+        {"record_id": SUBJECT_ID, "record_type": "registration"},
+    ]
     assert first_model.source_record_ids == [
         SUBJECT_ID,
         CONCLUSION_ID,
@@ -315,4 +342,17 @@ def test_v2_strategy_report_publication_lineage_uses_source_record_type() -> Non
     }
 
     assert (V2_SOURCE_TYPE, source_id, "derived-from") in lineage
+    assert ("registration", SUBJECT_ID, "derived-from") in lineage
+    assert (
+        "apex-research.protocol-assessment.v1",
+        ASSESSMENT_ID,
+        "derived-from",
+    ) in lineage
+    assert (
+        "apex-research.framework-change-prerequisite.v1",
+        PREREQUISITE_ID,
+        "derived-from",
+    ) in lineage
+    assert (CONCLUSION_TYPE, CONCLUSION_ID, "derived-from") in lineage
     assert (LEGACY_SOURCE_TYPE, source_id, "derived-from") not in lineage
+    assert not any(kind == "apex-report-source-record" for kind, _, _ in lineage)

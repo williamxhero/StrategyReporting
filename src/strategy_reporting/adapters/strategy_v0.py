@@ -65,6 +65,14 @@ class StrategyReportV0Adapter:
                 "record_id": source_id,
                 "record_type": source_type,
             },
+            source_records=(
+                [
+                    {"record_id": record_id, "record_type": record_type}
+                    for record_type, record_id in references
+                ]
+                if source_type == V2_SOURCE_TYPE
+                else None
+            ),
             source_record_ids=sorted({record_id for _, record_id in references} | {source_id}),
         )
 
@@ -200,6 +208,7 @@ class StrategyReportV0Adapter:
                 or raw.get("record_id") != record_id
                 or raw.get("record_type") != record_type
                 or not isinstance(raw.get("payload"), Mapping)
+                or raw["payload"].get("schema") != record_type
             ):
                 raise ContractError(
                     "strategy_report_reference_identity",

@@ -16,7 +16,7 @@ from strategy_reporting.adapters.strategy_v0 import (
 from strategy_reporting.adapters.workspace import WorkspaceAdapter
 from strategy_reporting.application import ReportingApplication
 from strategy_reporting.errors import ContractError
-from strategy_reporting.models import ReportOptions
+from strategy_reporting.models import ReportOptions, StrategyReportV0
 from strategy_reporting.renderers import RendererRegistry
 
 SUBJECT_ID = "b" * 64
@@ -378,3 +378,42 @@ def test_v2_strategy_report_publication_lineage_uses_source_record_type() -> Non
     ) in lineage
     assert (LEGACY_SOURCE_TYPE, source_id, "derived-from") not in lineage
     assert not any(kind == "apex-report-source-record" for kind, _, _ in lineage)
+
+
+def _minimal_model(*, delta: float | int) -> StrategyReportV0:
+    return StrategyReportV0(
+        title="determinism fixture",
+        subject_id=SUBJECT_ID,
+        source_id=V2_SOURCE_ID,
+        template_hash="0" * 64,
+        applicability={"scope": "test"},
+        evidence_level="candidate_evidence",
+        decision="uncertain",
+        limitations=[],
+        sections=[{"section_id": "delta", "status": "available", "facts": {"delta": delta}}],
+        source_publication={"record_id": V2_SOURCE_ID, "record_type": V2_SOURCE_TYPE},
+        source_record_ids=[V2_SOURCE_ID],
+    )
+
+
+def test_html_render_is_identical_for_an_exact_zero_float_or_int_fact() -> None:
+    """A section fact of exactly 0.0 must render the same as 0: canonical_json already
+    normalizes a zero float to an int for content hashing (0.0 and -0.0 must hash the same
+    as 0), so the HTML renderer must apply that same normalization -- otherwise a report
+    built fresh (real float 0.0) renders different HTML bytes than the same report rebuilt
+    from its own already-canonicalized model bytes (which round-trip as int 0), and
+    rebuild() would wrongly report a hash mismatch on a real, unchanged report."""
+    renderer = RendererRegistry().resolve(_minimal_model(delta=0.0))
+    options = ReportOptions()
+
+    rendered_from_float = renderer.render(_minimal_model(delta=0.0), options)
+    rendered_from_int = renderer.render(_minimal_model(delta=0), options)
+
+    html_artifact_float = next(
+        item for item in rendered_from_float.artifacts if item.name == "strategy-report-v0.html"
+    )
+    html_artifact_int = next(
+        item for item in rendered_from_int.artifacts if item.name == "strategy-report-v0.html"
+    )
+    assert html_artifact_float.content == html_artifact_int.content
+    assert b"0.0" not in html_artifact_float.content

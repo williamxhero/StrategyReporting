@@ -12,3 +12,7 @@ htmlcov/
 portal-output/
 .worktrees/
 runtime/
+/tests/
+/tools/
+/docs/
+/artifacts/

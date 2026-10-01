@@ -25,6 +25,18 @@ from strategy_reporting.contracts.evidence_v2 import (
     evidence_record_descriptor,
 )
 from strategy_reporting.errors import ContractError, ReportingError, SourceError
+from strategy_reporting.models import ArtifactRef
+
+_BEHAVIORAL_DIMENSIONS = {
+    "decision_time",
+    "warm_up",
+    "strict_comparison",
+    "entry",
+    "exit",
+    "sizing",
+    "state_transition",
+    "add_reduce",
+}
 
 
 class EvidenceV2ReadModelBuilder:
@@ -52,6 +64,7 @@ class EvidenceV2ReadModelBuilder:
             self._verify_evidence_publication(evidence_publication, source)
             external_records = self._read_external_records(source)
             self._verify_embedded_readbacks(source, external_records)
+            self._verify_behavioral_conformance_receipt(source, external_records)
             self._verify_scope(source, external_records)
             return EvidenceV2ReadModel(
                 source=source,
@@ -551,6 +564,118 @@ class EvidenceV2ReadModelBuilder:
                         "evidence_v2_return_owner_readback_mismatch",
                         "Deflated Sharpe return owner payload or lineage differs",
                     )
+
+    def _verify_behavioral_conformance_receipt(
+        self,
+        source: EvidenceV2StudySource,
+        records: list[ExternalRecordReadback],
+    ) -> None:
+        binding = source.evidence.candidate_gate
+        if binding is None:
+            return
+        publications = {
+            (item.reference.record_type, item.reference.record_id): item.publication
+            for item in records
+            if item.publication is not None
+        }
+        request_publication = publications.get(
+            (binding.behavioral_request.record_type, binding.behavioral_request.record_id)
+        )
+        assessment_publication = publications.get(
+            (binding.behavioral_assessment.record_type, binding.behavioral_assessment.record_id)
+        )
+        if request_publication is None or assessment_publication is None:
+            raise ContractError(
+                "evidence_v2_behavioral_receipt_missing",
+                "behavioral gate request or assessment readback is missing",
+            )
+        request = request_publication.payload
+        assessment = assessment_publication.payload
+        if assessment.get("status") != "passed":
+            if assessment.get("runtime_conformance") is not None:
+                raise ContractError(
+                    "evidence_v2_behavioral_receipt_state_mismatch",
+                    "a non-passing behavioral assessment carries a conformance receipt",
+                )
+            return
+        reference = _mapping(
+            assessment.get("runtime_conformance"), "behavioral conformance reference"
+        )
+        package = _mapping(request.get("package"), "behavioral gate package")
+        scenarios = request.get("scenarios")
+        parameters = request.get("parameters")
+        profile = request.get("sandbox_profile")
+        if (
+            not isinstance(scenarios, list)
+            or not all(isinstance(item, Mapping) for item in scenarios)
+            or not isinstance(parameters, Mapping)
+            or not isinstance(profile, Mapping)
+        ):
+            raise ContractError(
+                "evidence_v2_behavioral_receipt_binding_invalid",
+                "behavioral gate request lacks complete conformance inputs",
+            )
+        expected = {
+            "package_hash": package.get("package_hash"),
+            "parameters_hash": canonical_sha256(dict(parameters)),
+            "profile_hash": canonical_sha256(dict(profile)),
+            "scenario_hash": canonical_sha256(
+                [
+                    {"sha256": item.get("sha256"), "bytes": item.get("bytes")}
+                    for item in scenarios
+                    if isinstance(item, Mapping)
+                ]
+            ),
+        }
+        if (
+            reference.get("schema") != "quant-runtime.behavioral-conformance-ref.v1"
+            or reference.get("status") != "passed"
+            or reference.get("evidence_level") != "behavioral-conformance"
+            or any(reference.get(key) != value for key, value in expected.items())
+            or not isinstance(reference.get("conformance_id"), str)
+            or not isinstance(reference.get("artifact"), Mapping)
+        ):
+            raise ContractError(
+                "evidence_v2_behavioral_receipt_binding_mismatch",
+                "behavioral conformance receipt identity differs from the gate request",
+            )
+        conformance_id = str(reference["conformance_id"])
+        try:
+            raw = self.workspace.client.get_record(conformance_id)
+        except Exception as exc:
+            raise SourceError(
+                "evidence_v2_behavioral_receipt_missing",
+                f"cannot read behavioral conformance receipt {conformance_id}: {exc}",
+            ) from exc
+        publication = PublicationReadback.model_validate(raw, strict=True)
+        evidence = publication.payload
+        artifact = dict(reference["artifact"])
+        dimensions = evidence.get("dimensions")
+        trace = evidence.get("trace")
+        if (
+            publication.record_id != conformance_id
+            or publication.record_type != "quant-runtime.behavioral-conformance.v1"
+            or publication.artifacts != [ArtifactRef.model_validate(artifact, strict=True)]
+            or evidence.get("schema") != "quant-runtime.behavioral-conformance-evidence.v1"
+            or evidence.get("evidence_level") != "behavioral-conformance"
+            or evidence.get("outcome") not in {None, "passed"}
+            or any(evidence.get(key) != value for key, value in expected.items())
+            or not isinstance(dimensions, Mapping)
+            or set(dimensions) != _BEHAVIORAL_DIMENSIONS
+            or any(
+                not isinstance(item, Mapping) or item.get("status") != "passed"
+                for item in dimensions.values()
+            )
+            or not isinstance(trace, list)
+            or any(
+                not isinstance(item, Mapping) or item.get("status") != "passed" for item in trace
+            )
+        ):
+            raise ContractError(
+                "evidence_v2_behavioral_receipt_mismatch",
+                "behavioral conformance receipt publication differs from its gate binding",
+            )
+        self.workspace.verify_ref(artifact)
 
     @staticmethod
     def _verify_scope(

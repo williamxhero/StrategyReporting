@@ -170,6 +170,7 @@ class StrategyReportV0Adapter:
             "revisions",
             "framework_prerequisites",
             "restudies",
+            "references",
         ):
             values.extend(self._references(payload.get(key)))
         references: dict[tuple[str, str], None] = {}

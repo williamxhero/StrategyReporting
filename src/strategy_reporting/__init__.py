@@ -1,4 +1,5 @@
 from strategy_reporting.adapters.behavior_descriptors import BehaviorDescriptorReadModelBuilder
+from strategy_reporting.adapters.dossier_report import DossierReportBuilder
 from strategy_reporting.adapters.evolution import EvolutionProgressReadModelBuilder
 from strategy_reporting.adapters.quality_diversity_archives import (
     QualityDiversityArchiveReadModelBuilder,
@@ -11,6 +12,7 @@ from strategy_reporting.contracts.behavior_descriptors import (
     BehaviorDescriptorRef,
 )
 from strategy_reporting.contracts.campaign_report import CampaignReport, CampaignReportSource
+from strategy_reporting.contracts.dossier_report import DossierReport, DossierSourceRefs
 from strategy_reporting.contracts.evolution import (
     EvolutionIslandRef,
     EvolutionProgressReadModel,
@@ -41,6 +43,9 @@ __all__ = [
     "BehaviorDescriptorRef",
     "CampaignReport",
     "CampaignReportSource",
+    "DossierReport",
+    "DossierReportBuilder",
+    "DossierSourceRefs",
     "EvidenceArchiveReadModel",
     "EvolutionIslandRef",
     "EvolutionProgressReadModel",

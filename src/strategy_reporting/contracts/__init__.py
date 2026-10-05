@@ -1,3 +1,4 @@
+from strategy_reporting.contracts.dossier_report import DossierReport, DossierSourceRefs
 from strategy_reporting.contracts.evidence_v2 import (
     EvidenceV2ReadModel,
     EvidenceV2SourceRef,
@@ -58,4 +59,6 @@ __all__ = [
     "CampaignReportSource",
     "CampaignSourceRef",
     "CampaignSourceSection",
+    "DossierReport",
+    "DossierSourceRefs",
 ]
